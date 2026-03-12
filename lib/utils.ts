@@ -5,10 +5,28 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
+// Module-level currency — updated by i18n context when settings load
+let _currency = "USD"
+export function setCurrency(currency: string) {
+  _currency = currency || "USD"
+}
+
+// Locale mapping for proper number/symbol formatting per currency
+const _localeMap: Record<string, string> = {
+  USD: "en-US",
+  EUR: "fr-FR",
+  GBP: "en-GB",
+  CAD: "en-CA",
+  AUD: "en-AU",
+  DZD: "fr-DZ",
+}
+
+export function formatCurrency(amount: number, currency?: string): string {
+  const curr = currency ?? _currency
+  const locale = _localeMap[curr] ?? "en-US"
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "USD",
+    currency: curr,
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(amount)

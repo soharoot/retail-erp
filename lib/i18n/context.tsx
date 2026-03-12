@@ -10,6 +10,7 @@ import {
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { defaultSettings, type Settings } from "@/lib/types"
 import { translations, resolveKey, type Language } from "./translations"
+import { setCurrency } from "@/lib/utils"
 
 interface I18nContextValue {
   language: Language
@@ -43,6 +44,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = language
     document.documentElement.dir = dir
   }, [language, dir])
+
+  // Keep formatCurrency in sync with settings.currency across all pages
+  useEffect(() => {
+    setCurrency(settings.currency || "USD")
+  }, [settings.currency])
 
   const t = useMemo(() => {
     const langObj = translations[language] as Record<string, unknown>
