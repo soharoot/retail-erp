@@ -26,8 +26,8 @@ export default function InventoryPage() {
   // ── derived ────────────────────────────────────────────────
   const filtered = inventory.filter((item) => {
     const matchesSearch =
-      item.productName.toLowerCase().includes(search.toLowerCase()) ||
-      item.category.toLowerCase().includes(search.toLowerCase())
+      (item.productName ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (item.category ?? "").toLowerCase().includes(search.toLowerCase())
     if (!matchesSearch) return false
     if (filterStatus === "All") return true
     const { label } = stockStatus(item.stock, item.minStock)

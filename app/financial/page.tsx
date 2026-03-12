@@ -33,8 +33,8 @@ export default function FinancialPage() {
   const revenue = completedSales.reduce((sum, s) => sum + s.total, 0)
 
   const cogs = completedSales
-    .flatMap((s) => s.items)
-    .reduce((sum, item) => sum + item.qty * item.costAtSale, 0)
+    .flatMap((s) => s.items ?? [])
+    .reduce((sum, item) => sum + (item?.qty ?? 0) * (item?.costAtSale ?? 0), 0)
 
   const grossProfit = revenue - cogs
   const grossMargin = revenue > 0 ? Math.round((grossProfit / revenue) * 100) : 0
@@ -59,8 +59,8 @@ export default function FinancialPage() {
       .reduce((s, sale) => s + sale.total, 0)
     const cost = completedSales
       .filter((s) => s.date.startsWith(key))
-      .flatMap((s) => s.items)
-      .reduce((s, item) => s + item.qty * item.costAtSale, 0)
+      .flatMap((s) => s.items ?? [])
+      .reduce((s, item) => s + (item?.qty ?? 0) * (item?.costAtSale ?? 0), 0)
     return { label, revenue: rev, cogs: cost, profit: rev - cost }
   })
   const maxPnl = Math.max(...pnlData.map((d) => Math.max(d.revenue, d.cogs)), 1)

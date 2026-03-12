@@ -37,7 +37,8 @@ export default function ReportsPage() {
   // Top customer by spend
   const customerMap: Record<string, number> = {}
   completedSales.forEach((s) => {
-    customerMap[s.customer] = (customerMap[s.customer] || 0) + s.total
+    const cust = s.customer ?? "Unknown"
+    customerMap[cust] = (customerMap[cust] || 0) + (s.total ?? 0)
   })
   const topCustomer = Object.entries(customerMap).sort((a, b) => b[1] - a[1])[0]
 
@@ -55,10 +56,11 @@ export default function ReportsPage() {
 
   // ── Top products by revenue ──────────────────────────────────
   const productRevMap: Record<string, { revenue: number; qty: number }> = {}
-  completedSales.flatMap((s) => s.items).forEach((item) => {
+  completedSales.flatMap((s) => s.items ?? []).forEach((item) => {
+    if (!item?.name) return
     if (!productRevMap[item.name]) productRevMap[item.name] = { revenue: 0, qty: 0 }
-    productRevMap[item.name].revenue += item.qty * item.price
-    productRevMap[item.name].qty += item.qty
+    productRevMap[item.name].revenue += (item.qty ?? 0) * (item.price ?? 0)
+    productRevMap[item.name].qty += (item.qty ?? 0)
   })
   const topProducts = Object.entries(productRevMap)
     .map(([name, data]) => ({ name, ...data }))
@@ -68,9 +70,10 @@ export default function ReportsPage() {
   // ── Inventory by category ────────────────────────────────────
   const catMap: Record<string, { count: number; units: number }> = {}
   inventory.forEach((item) => {
-    if (!catMap[item.category]) catMap[item.category] = { count: 0, units: 0 }
-    catMap[item.category].count += 1
-    catMap[item.category].units += item.stock
+    const cat = item.category ?? "Uncategorized"
+    if (!catMap[cat]) catMap[cat] = { count: 0, units: 0 }
+    catMap[cat].count += 1
+    catMap[cat].units += (item.stock ?? 0)
   })
   const inventoryByCategory = Object.entries(catMap)
     .map(([category, data]) => ({ category, ...data }))

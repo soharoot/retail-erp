@@ -36,8 +36,8 @@ export default function DashboardPage() {
   const totalRevenue = completedSales.reduce((sum, s) => sum + s.total, 0)
 
   const cogs = completedSales
-    .flatMap((s) => s.items)
-    .reduce((sum, item) => sum + item.qty * item.costAtSale, 0)
+    .flatMap((s) => s.items ?? [])
+    .reduce((sum, item) => sum + (item?.qty ?? 0) * (item?.costAtSale ?? 0), 0)
 
   const netProfit = totalRevenue - cogs
 
@@ -75,8 +75,8 @@ export default function DashboardPage() {
 
   // ── Low stock items ─────────────────────────────────────────
   const lowStockItems = inventory
-    .filter((i) => i.stock <= i.minStock)
-    .sort((a, b) => a.stock - b.stock)
+    .filter((i) => (i.stock ?? 0) <= (i.minStock ?? 10))
+    .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0))
     .slice(0, 5)
 
   const kpis = [

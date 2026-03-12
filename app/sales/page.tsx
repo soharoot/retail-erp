@@ -55,8 +55,8 @@ export default function SalesPage() {
   // ── derived ────────────────────────────────────────────────
   const filtered = sales.filter((s) => {
     const matchSearch =
-      s.id.toLowerCase().includes(search.toLowerCase()) ||
-      s.customer.toLowerCase().includes(search.toLowerCase())
+      (s.id ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (s.customer ?? "").toLowerCase().includes(search.toLowerCase())
     const matchStatus = filterStatus === "All" || s.status === filterStatus
     return matchSearch && matchStatus
   })
