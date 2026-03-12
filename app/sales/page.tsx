@@ -28,13 +28,15 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-const TAX_RATE = 0.10
-
 export default function SalesPage() {
   const [sales, setSales] = useSupabaseData<Sale[]>("erp-sales", [])
   const [products] = useSupabaseData<Product[]>("erp-products", [])
   const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
   const [settings] = useSupabaseData<Settings>("erp-settings", defaultSettings)
+
+  // Read tax rate from settings (stored as string e.g. "10", "15")
+  const taxRate = parseFloat(settings?.taxRate ?? "10") / 100
+  const taxRateLabel = `${parseFloat(settings?.taxRate ?? "10")}%`
 
   const [showModal, setShowModal] = useState(false)
   const [editingSale, setEditingSale] = useState<Sale | null>(null)
@@ -118,7 +120,7 @@ export default function SalesPage() {
     })
 
   const subtotal = computedItems.reduce((s, i) => s + i.qty * i.price, 0)
-  const tax = subtotal * TAX_RATE
+  const tax = subtotal * taxRate
   const grandTotal = subtotal + tax
 
   // ── save ────────────────────────────────────────────────────
@@ -503,7 +505,7 @@ export default function SalesPage() {
               {computedItems.length > 0 && (
                 <div className="rounded-lg bg-gray-50 p-4 space-y-2 text-sm">
                   <div className="flex justify-between"><span className="text-gray-500">Subtotal</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Tax (10%)</span><span className="font-medium">{formatCurrency(tax)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Tax ({taxRateLabel})</span><span className="font-medium">{formatCurrency(tax)}</span></div>
                   <div className="flex justify-between border-t pt-2 font-semibold">
                     <span>Total</span><span className="text-indigo-600">{formatCurrency(grandTotal)}</span>
                   </div>
@@ -615,7 +617,7 @@ export default function SalesPage() {
                 </tbody>
                 <tfoot>
                   <tr><td colSpan={3} className="pt-2 text-right text-gray-500">Subtotal</td><td className="pt-2 text-right">{formatCurrency(printSale.items.reduce((s, i) => s + i.qty * i.price, 0))}</td></tr>
-                  <tr><td colSpan={3} className="text-right text-gray-500">Tax (10%)</td><td className="text-right">{formatCurrency(printSale.items.reduce((s, i) => s + i.qty * i.price, 0) * TAX_RATE)}</td></tr>
+                  <tr><td colSpan={3} className="text-right text-gray-500">Tax ({taxRateLabel})</td><td className="text-right">{formatCurrency(printSale.items.reduce((s, i) => s + i.qty * i.price, 0) * taxRate)}</td></tr>
                   <tr className="border-t">
                     <td colSpan={3} className="pt-2 text-right font-bold text-gray-900">Total</td>
                     <td className="pt-2 text-right font-bold text-indigo-600">{formatCurrency(printSale.total)}</td>
