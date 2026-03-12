@@ -6,11 +6,19 @@ import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { SearchInput } from "@/components/shared/search-input"
-import { Truck, ShoppingBag, DollarSign, Pencil, X, Mail, Phone } from "lucide-react"
+import { Truck, ShoppingBag, DollarSign, Landmark, Pencil, Trash2, X, Mail, Phone, AlertTriangle } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 
 interface Supplier {
   id: string; name: string; contactPerson: string; email: string; phone: string; address: string; orders: number; totalSpent: number; status: string
+}
+
+interface PurchaseOrder {
+  id: string; date: string; supplier: string; supplierId?: string; items: { name: string; qty: number; cost: number }[]; total: number; status: string; expectedDate: string; amountPaid: number; remainingDebt: number
+}
+
+interface SupplierDebt {
+  id: string; supplierId: string; supplierName: string; purchaseId: string; totalAmount: number; amountPaid: number; remainingDebt: number; status: string; payments: { date: string; amount: number; note: string }[]; createdAt: string
 }
 
 const initialSuppliers: Supplier[] = [
@@ -22,38 +30,88 @@ const initialSuppliers: Supplier[] = [
   { id: "6", name: "FreshGoods Trading", contactPerson: "Lisa Chen", email: "lisa@freshgoods.com", phone: "+1 (555) 678-9012", address: "987 Trade Ln, Seattle, WA", orders: 19, totalSpent: 34000, status: "active" },
 ]
 
+const initialPurchases: PurchaseOrder[] = [
+  { id: "PO-001", date: "2025-03-01", supplier: "TechGear Wholesale", supplierId: "1", items: [{ name: "Wireless Headphones", qty: 50, cost: 65 }, { name: "Smart Watch", qty: 30, cost: 100 }], total: 6250, status: "pending", expectedDate: "2025-03-15", amountPaid: 2000, remainingDebt: 4250 },
+  { id: "PO-002", date: "2025-02-25", supplier: "SportsPro Suppliers", supplierId: "2", items: [{ name: "Running Shoes", qty: 40, cost: 40 }], total: 1600, status: "approved", expectedDate: "2025-03-10", amountPaid: 0, remainingDebt: 1600 },
+  { id: "PO-003", date: "2025-02-20", supplier: "HomeComfort Ltd", supplierId: "3", items: [{ name: "Coffee Maker", qty: 25, cost: 35 }, { name: "Blender Pro", qty: 20, cost: 30 }], total: 1475, status: "received", expectedDate: "2025-03-05", amountPaid: 1475, remainingDebt: 0 },
+  { id: "PO-004", date: "2025-02-15", supplier: "Fashion Forward Inc", supplierId: "4", items: [{ name: "Winter Jacket", qty: 60, cost: 55 }], total: 3300, status: "received", expectedDate: "2025-03-01", amountPaid: 3300, remainingDebt: 0 },
+  { id: "PO-005", date: "2025-02-10", supplier: "Global Electronics Co", supplierId: "5", items: [{ name: "Laptop Stand", qty: 80, cost: 20 }], total: 1600, status: "approved", expectedDate: "2025-03-08", amountPaid: 1600, remainingDebt: 0 },
+  { id: "PO-006", date: "2025-02-05", supplier: "FreshGoods Trading", supplierId: "6", items: [{ name: "Desk Lamp", qty: 35, cost: 18 }], total: 630, status: "cancelled", expectedDate: "2025-02-28", amountPaid: 0, remainingDebt: 0 },
+  { id: "PO-007", date: "2025-01-28", supplier: "TechGear Wholesale", supplierId: "1", items: [{ name: "Wireless Headphones", qty: 30, cost: 65 }], total: 1950, status: "received", expectedDate: "2025-02-15", amountPaid: 500, remainingDebt: 1450 },
+  { id: "PO-008", date: "2025-01-20", supplier: "SportsPro Suppliers", supplierId: "2", items: [{ name: "Tennis Racket", qty: 20, cost: 70 }, { name: "Yoga Mat", qty: 50, cost: 12 }], total: 2000, status: "received", expectedDate: "2025-02-10", amountPaid: 2000, remainingDebt: 0 },
+]
+
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useLocalStorage<Supplier[]>("erp-suppliers", initialSuppliers)
+  const [purchases] = useLocalStorage<PurchaseOrder[]>("erp-purchases", initialPurchases)
+  const [debts] = useLocalStorage<SupplierDebt[]>("erp-supplier-debts", [])
   const [search, setSearch] = useState("")
   const [showDialog, setShowDialog] = useState(false)
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [form, setForm] = useState({ name: "", contactPerson: "", email: "", phone: "", address: "", status: "active" })
+  const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null)
 
   const filtered = suppliers.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.contactPerson.toLowerCase().includes(search.toLowerCase()) || s.email.toLowerCase().includes(search.toLowerCase()))
   const active = suppliers.filter(s => s.status === "active").length
   const totalOrders = suppliers.reduce((sum, s) => sum + s.orders, 0)
   const totalSpent = suppliers.reduce((sum, s) => sum + s.totalSpent, 0)
+  const totalOutstandingDebt = debts.filter(d => d.status !== "paid").reduce((sum, d) => sum + d.remainingDebt, 0)
+
+  // Get outstanding debt for a specific supplier
+  const getSupplierDebt = (supplierId: string) => {
+    return debts
+      .filter(d => d.supplierId === supplierId && d.status !== "paid")
+      .reduce((sum, d) => sum + d.remainingDebt, 0)
+  }
+
+  // Get purchase count for a supplier
+  const getSupplierPurchaseCount = (supplierId: string, supplierName: string) => {
+    return purchases.filter(p => p.supplierId === supplierId || p.supplier === supplierName).length
+  }
+
+  // Get active debt count for a supplier
+  const getSupplierActiveDebts = (supplierId: string) => {
+    return debts.filter(d => d.supplierId === supplierId && d.status !== "paid").length
+  }
 
   const handleSave = () => {
     if (!form.name) return
     if (editing) {
       setSuppliers(suppliers.map(s => s.id === editing.id ? { ...s, ...form } : s))
     } else {
-      setSuppliers([...suppliers, { id: String(suppliers.length + 1), ...form, orders: 0, totalSpent: 0 }])
+      const maxId = suppliers.reduce((max, s) => Math.max(max, parseInt(s.id) || 0), 0)
+      setSuppliers([...suppliers, { id: String(maxId + 1), ...form, orders: 0, totalSpent: 0 }])
     }
     setShowDialog(false); setEditing(null); setForm({ name: "", contactPerson: "", email: "", phone: "", address: "", status: "active" })
   }
 
   const handleEdit = (s: Supplier) => { setEditing(s); setForm({ name: s.name, contactPerson: s.contactPerson, email: s.email, phone: s.phone, address: s.address, status: s.status }); setShowDialog(true) }
 
+  const handleDelete = (s: Supplier) => {
+    setDeleteTarget(s)
+  }
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return
+    setSuppliers(suppliers.filter(s => s.id !== deleteTarget.id))
+    setDeleteTarget(null)
+  }
+
+  const canDelete = (s: Supplier) => {
+    const purchaseCount = getSupplierPurchaseCount(s.id, s.name)
+    const activeDebtCount = getSupplierActiveDebts(s.id)
+    return purchaseCount === 0 && activeDebtCount === 0
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="Supplier Management" subtitle="Manage suppliers and track purchase history" action={{ label: "Add Supplier", onClick: () => { setEditing(null); setForm({ name: "", contactPerson: "", email: "", phone: "", address: "", status: "active" }); setShowDialog(true) } }} />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard title="Active Suppliers" value={String(active)} subtitle="Currently active" icon={Truck} />
         <KpiCard title="Total Orders" value={String(totalOrders)} subtitle="All time orders" icon={ShoppingBag} />
         <KpiCard title="Total Spent" value={formatCurrency(totalSpent)} subtitle="All time spending" icon={DollarSign} />
+        <KpiCard title="Outstanding Debt" value={formatCurrency(totalOutstandingDebt)} subtitle="Unpaid balances" icon={Landmark} />
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -71,32 +129,49 @@ export default function SuppliersPage() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Contact Info</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Orders</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Spent</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Outstanding Debt</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filtered.map(s => (
-                <tr key={s.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{s.contactPerson}</td>
-                  <td className="px-4 py-3">
-                    <div className="text-sm space-y-1">
-                      <div className="flex items-center gap-1 text-gray-600"><Mail className="h-3.5 w-3.5 text-gray-400" />{s.email}</div>
-                      <div className="flex items-center gap-1 text-gray-600"><Phone className="h-3.5 w-3.5 text-gray-400" />{s.phone}</div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-600">{s.orders}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrency(s.totalSpent)}</td>
-                  <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                  <td className="px-4 py-3"><button onClick={() => handleEdit(s)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Pencil className="h-4 w-4" /></button></td>
-                </tr>
-              ))}
+              {filtered.map(s => {
+                const debt = getSupplierDebt(s.id)
+                return (
+                  <tr key={s.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.name}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{s.contactPerson}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-sm space-y-1">
+                        <div className="flex items-center gap-1 text-gray-600"><Mail className="h-3.5 w-3.5 text-gray-400" />{s.email}</div>
+                        <div className="flex items-center gap-1 text-gray-600"><Phone className="h-3.5 w-3.5 text-gray-400" />{s.phone}</div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{s.orders}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrency(s.totalSpent)}</td>
+                    <td className="px-4 py-3 text-sm font-medium">
+                      {debt > 0 ? (
+                        <span className="text-red-600">{formatCurrency(debt)}</span>
+                      ) : (
+                        <span className="text-green-600">No debt</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => handleEdit(s)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Pencil className="h-4 w-4" /></button>
+                        <button onClick={() => handleDelete(s)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* Add/Edit Supplier Dialog */}
       {showDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowDialog(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
@@ -117,6 +192,54 @@ export default function SuppliersPage() {
                 <button onClick={() => setShowDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
                 <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">{editing ? "Save" : "Add Supplier"}</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-6 border-b">
+              <h2 className="text-lg font-bold text-gray-900">Delete Supplier</h2>
+              <button onClick={() => setDeleteTarget(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              {canDelete(deleteTarget) ? (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Are you sure you want to delete <span className="font-semibold text-gray-900">{deleteTarget.name}</span>? This action cannot be undone.
+                  </p>
+                  <div className="flex justify-end gap-3 pt-4 border-t">
+                    <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
+                    <button onClick={confirmDelete} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Delete</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-red-800">Cannot delete {deleteTarget.name}</p>
+                      <p className="text-sm text-red-700 mt-1">
+                        This supplier has{" "}
+                        {getSupplierPurchaseCount(deleteTarget.id, deleteTarget.name) > 0 && (
+                          <span className="font-medium">{getSupplierPurchaseCount(deleteTarget.id, deleteTarget.name)} purchase order(s)</span>
+                        )}
+                        {getSupplierPurchaseCount(deleteTarget.id, deleteTarget.name) > 0 && getSupplierActiveDebts(deleteTarget.id) > 0 && " and "}
+                        {getSupplierActiveDebts(deleteTarget.id) > 0 && (
+                          <span className="font-medium">{getSupplierActiveDebts(deleteTarget.id)} outstanding debt(s)</span>
+                        )}
+                        . Remove all linked records before deleting this supplier.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end pt-4 border-t">
+                    <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">Close</button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
