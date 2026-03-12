@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
-import { ClipboardList, Clock, DollarSign, PackageCheck, X, Eye } from "lucide-react"
+import { ClipboardList, Clock, DollarSign, PackageCheck, X, Eye, Trash2 } from "lucide-react"
 import { formatCurrency, formatDate, generateId } from "@/lib/utils"
 import type { PurchaseOrder, Supplier, Product, InventoryItem, SupplierDebt } from "@/lib/types"
 
@@ -13,9 +13,10 @@ function StatusBadge({ status }: { status: string }) {
     received: "bg-green-100 text-green-700",
     cancelled: "bg-red-100 text-red-700",
   }
+  const safe = status ?? "pending"
   return (
-    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${map[status] ?? "bg-gray-100 text-gray-600"}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${map[safe] ?? "bg-gray-100 text-gray-600"}`}>
+      {safe.charAt(0).toUpperCase() + safe.slice(1)}
     </span>
   )
 }
@@ -31,6 +32,7 @@ export default function PurchasesPage() {
   const [activeTab, setActiveTab] = useState("all")
   const [showNewOrder, setShowNewOrder] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<PurchaseOrder | null>(null)
 
   // Form state
   const [formSupplierId, setFormSupplierId] = useState("")
@@ -80,7 +82,32 @@ export default function PurchasesPage() {
   const totalValue = orders.filter((o) => o.status !== "cancelled").reduce((s, o) => s + o.total, 0)
   const receivedUnits = orders
     .filter((o) => o.status === "received")
-    .reduce((s, o) => s + o.items.reduce((si, i) => si + i.qty, 0), 0)
+    .reduce((s, o) => s + (o.items ?? []).reduce((si, i) => si + (i?.qty ?? 0), 0), 0)
+
+  const handleDeleteOrder = (order: PurchaseOrder) => {
+    // Remove the order
+    setOrders(orders.filter((o) => o.id !== order.id))
+
+    // Reverse inventory: reduce stock by the quantities in this order
+    const today = new Date().toISOString().split("T")[0]
+    const items = order.items ?? []
+    if (items.length > 0) {
+      setInventory(
+        inventory.map((inv) => {
+          const orderedItem = items.find((item) => item.name === inv.productName)
+          if (orderedItem) {
+            return { ...inv, stock: Math.max(0, inv.stock - (orderedItem.qty ?? 0)), lastUpdated: today }
+          }
+          return inv
+        })
+      )
+    }
+
+    // Remove the associated supplier debt entry
+    setDebts(debts.filter((d) => d.purchaseId !== order.id))
+
+    setDeleteConfirm(null)
+  }
 
   const handleCreateOrder = () => {
     if (!formSupplierId || !formProductId || !formQty || !formUnitPrice) return
@@ -239,7 +266,7 @@ export default function PurchasesPage() {
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Paid</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Debt</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Details</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -248,7 +275,7 @@ export default function PurchasesPage() {
                     <td className="px-4 py-3 font-mono font-medium text-gray-900">{o.id}</td>
                     <td className="px-4 py-3 text-gray-500">{formatDate(o.date)}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">{o.supplier}</td>
-                    <td className="px-4 py-3 text-gray-500">{o.items.reduce((s, i) => s + i.qty, 0)} units</td>
+                    <td className="px-4 py-3 text-gray-500">{(o.items ?? []).reduce((s, i) => s + (i?.qty ?? 0), 0)} units</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(o.total)}</td>
                     <td className="px-4 py-3 text-right text-green-600 font-medium">{formatCurrency(o.amountPaid || 0)}</td>
                     <td className="px-4 py-3 text-right">
@@ -258,12 +285,22 @@ export default function PurchasesPage() {
                     </td>
                     <td className="px-4 py-3 text-center"><StatusBadge status={o.status} /></td>
                     <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => setSelectedOrder(o)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => setSelectedOrder(o)}
+                          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                          title="View details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(o)}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"
+                          title="Delete order"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -324,6 +361,36 @@ export default function PurchasesPage() {
                   </tfoot>
                 </table>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirm Modal ── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Purchase Order?</h3>
+            <p className="text-sm text-gray-500 mb-1">
+              PO <span className="font-mono font-medium">{deleteConfirm.id}</span> from{" "}
+              <span className="font-medium">{deleteConfirm.supplier}</span>
+            </p>
+            <p className="text-sm text-gray-500 mb-6">
+              This will reverse the inventory stock and remove the associated supplier debt. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteOrder(deleteConfirm)}
+                className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+              >
+                Delete
+              </button>
             </div>
           </div>
         </div>

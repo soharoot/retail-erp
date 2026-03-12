@@ -38,6 +38,9 @@ export default function ProductsPage() {
   const [filterCat, setFilterCat] = useState("All")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
+  // Guard: old Supabase data may not be a proper array
+  const safeCategories = Array.isArray(categories) ? categories : DEFAULT_CATEGORIES
+
   // ── derived ────────────────────────────────────────────────
   const filtered = products.filter((p) => {
     const matchesSearch =
@@ -133,20 +136,20 @@ export default function ProductsPage() {
   // ── categories ──────────────────────────────────────────────
   const handleAddCategory = () => {
     const trimmed = newCategory.trim()
-    if (trimmed && !categories.includes(trimmed)) {
-      setCategories([...categories, trimmed])
+    if (trimmed && !safeCategories.includes(trimmed)) {
+      setCategories([...safeCategories, trimmed])
     }
     setNewCategory("")
   }
 
   const handleDeleteCategory = (cat: string) => {
     const inUse = products.some((p) => p.category === cat)
-    if (!inUse) setCategories(categories.filter((c) => c !== cat))
+    if (!inUse) setCategories(safeCategories.filter((c) => c !== cat))
   }
 
   const totalProducts = products.length
   const activeProducts = products.filter((p) => p.status === "active").length
-  const totalCategories = categories.length
+  const totalCategories = safeCategories.length
 
   const statusColor = (s: string) =>
     s === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
@@ -197,7 +200,7 @@ export default function ProductsPage() {
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="All">All Categories</option>
-            {categories.map((c) => (
+            {safeCategories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
@@ -325,7 +328,7 @@ export default function ProductsPage() {
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select category</option>
-                  {categories.map((c) => (
+                  {safeCategories.map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
@@ -450,7 +453,7 @@ export default function ProductsPage() {
                 </button>
               </div>
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {categories.map((cat) => {
+                {safeCategories.map((cat) => {
                   const inUse = products.some((p) => p.category === cat)
                   return (
                     <div key={cat} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
