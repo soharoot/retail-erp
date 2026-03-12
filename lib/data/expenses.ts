@@ -1,4 +1,4 @@
-import type { Expense } from "@/lib/types"
+import type { Expense } from "@/lib/types/index"
 
 const expenses: Expense[] = [
   {

@@ -1,112 +1,272 @@
 "use client"
 
 import { useState } from "react"
-import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
-import { KpiCard } from "@/components/shared/kpi-card"
-import { SearchInput } from "@/components/shared/search-input"
-import { StatusBadge } from "@/components/shared/status-badge"
-import { Package, Boxes, AlertTriangle, CheckCircle, Warehouse } from "lucide-react"
-import { cn, formatDate } from "@/lib/utils"
+import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { PageHeader } from "@/components/layout/page-header"
+import { formatCurrency } from "@/lib/utils"
+import type { InventoryItem, Product } from "@/lib/types"
+import { Warehouse, AlertTriangle, X, TrendingUp, TrendingDown } from "lucide-react"
 
-interface InventoryItem {
-  id: string; sku: string; name: string; category: string; stock: number; minStock: number; maxStock: number; warehouse: string; status: string; lastRestocked: string
+function stockStatus(stock: number, minStock: number) {
+  if (stock === 0) return { label: "Out of Stock", color: "bg-red-100 text-red-700" }
+  if (stock <= minStock) return { label: "Low Stock", color: "bg-yellow-100 text-yellow-700" }
+  return { label: "In Stock", color: "bg-green-100 text-green-700" }
 }
 
-const initialInventory: InventoryItem[] = [
-  { id: "1", sku: "WH-001", name: "Wireless Headphones", category: "Electronics", stock: 45, minStock: 10, maxStock: 100, warehouse: "Main Warehouse", status: "in-stock", lastRestocked: "2025-02-15" },
-  { id: "2", sku: "RS-002", name: "Running Shoes", category: "Footwear", stock: 30, minStock: 15, maxStock: 80, warehouse: "Store Front", status: "in-stock", lastRestocked: "2025-02-20" },
-  { id: "3", sku: "CM-003", name: "Coffee Maker", category: "Appliances", stock: 8, minStock: 10, maxStock: 50, warehouse: "Main Warehouse", status: "low-stock", lastRestocked: "2025-01-28" },
-  { id: "4", sku: "YM-004", name: "Yoga Mat", category: "Sports", stock: 60, minStock: 20, maxStock: 120, warehouse: "Storage Unit B", status: "in-stock", lastRestocked: "2025-03-01" },
-  { id: "5", sku: "SW-005", name: "Smart Watch", category: "Electronics", stock: 12, minStock: 15, maxStock: 60, warehouse: "Main Warehouse", status: "low-stock", lastRestocked: "2025-02-10" },
-  { id: "6", sku: "WJ-006", name: "Winter Jacket", category: "Clothing", stock: 35, minStock: 10, maxStock: 70, warehouse: "Store Front", status: "in-stock", lastRestocked: "2025-02-25" },
-  { id: "7", sku: "BL-007", name: "Blender Pro", category: "Appliances", stock: 22, minStock: 8, maxStock: 40, warehouse: "Main Warehouse", status: "in-stock", lastRestocked: "2025-03-05" },
-  { id: "8", sku: "TN-008", name: "Tennis Racket", category: "Sports", stock: 18, minStock: 10, maxStock: 50, warehouse: "Storage Unit B", status: "in-stock", lastRestocked: "2025-02-18" },
-  { id: "9", sku: "DS-009", name: "Desk Lamp", category: "Furniture", stock: 5, minStock: 10, maxStock: 40, warehouse: "Main Warehouse", status: "low-stock", lastRestocked: "2025-01-15" },
-  { id: "10", sku: "LP-010", name: "Laptop Stand", category: "Electronics", stock: 42, minStock: 15, maxStock: 80, warehouse: "Main Warehouse", status: "in-stock", lastRestocked: "2025-03-02" },
-]
-
 export default function InventoryPage() {
-  const [items] = useLocalStorage<InventoryItem[]>("erp-inventory", initialInventory)
+  const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
+  const [products] = useSupabaseData<Product[]>("erp-products", [])
+
   const [search, setSearch] = useState("")
+  const [filterStatus, setFilterStatus] = useState("All")
+  const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null)
+  const [adjustAmount, setAdjustAmount] = useState("")
+  const [adjustReason, setAdjustReason] = useState("")
 
-  const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()) || i.sku.toLowerCase().includes(search.toLowerCase()) || i.category.toLowerCase().includes(search.toLowerCase()))
-  const totalStock = items.reduce((sum, i) => sum + i.stock, 0)
-  const lowStockItems = items.filter(i => i.stock < i.minStock)
-  const wellStocked = items.filter(i => i.stock >= i.minStock)
+  // ── derived ────────────────────────────────────────────────
+  const filtered = inventory.filter((item) => {
+    const matchesSearch =
+      item.productName.toLowerCase().includes(search.toLowerCase()) ||
+      item.category.toLowerCase().includes(search.toLowerCase())
+    if (!matchesSearch) return false
+    if (filterStatus === "All") return true
+    const { label } = stockStatus(item.stock, item.minStock)
+    return label === filterStatus
+  })
 
-  const getStockPercent = (stock: number, max: number) => Math.min((stock / max) * 100, 100)
-  const getStockColor = (stock: number, minStock: number, maxStock: number) => {
-    const pct = getStockPercent(stock, maxStock)
-    if (stock < minStock) return "bg-red-500"
-    if (pct < 40) return "bg-yellow-500"
-    return "bg-green-500"
+  const totalItems = inventory.length
+  const totalUnits = inventory.reduce((s, i) => s + i.stock, 0)
+  const lowStockCount = inventory.filter((i) => i.stock > 0 && i.stock <= i.minStock).length
+  const outOfStockCount = inventory.filter((i) => i.stock === 0).length
+
+  // Inventory value = Σ stock × product.cost
+  const inventoryValue = inventory.reduce((sum, item) => {
+    const prod = products.find((p) => p.id === item.productId)
+    return sum + item.stock * (prod?.cost ?? 0)
+  }, 0)
+
+  // ── adjust stock ────────────────────────────────────────────
+  const handleAdjust = () => {
+    if (!adjustItem) return
+    const delta = parseInt(adjustAmount) || 0
+    const today = new Date().toISOString().slice(0, 10)
+    setInventory(
+      inventory.map((i) =>
+        i.id === adjustItem.id
+          ? { ...i, stock: Math.max(0, i.stock + delta), lastUpdated: today }
+          : i
+      )
+    )
+    setAdjustItem(null)
+    setAdjustAmount("")
+    setAdjustReason("")
   }
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Inventory Management</h1>
-        <p className="text-sm text-gray-500 mt-1">Monitor stock levels and manage inventory in real-time</p>
+      <PageHeader
+        title="Inventory Management"
+        subtitle="Track and manage your stock levels"
+      />
+
+      {/* KPI cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[
+          { label: "Total Items", value: totalItems, icon: Warehouse, color: "text-indigo-600 bg-indigo-50" },
+          { label: "Total Units", value: totalUnits.toLocaleString(), icon: Warehouse, color: "text-blue-600 bg-blue-50" },
+          { label: "Low Stock Alerts", value: lowStockCount + outOfStockCount, icon: AlertTriangle, color: "text-yellow-600 bg-yellow-50" },
+          { label: "Inventory Value", value: formatCurrency(inventoryValue), icon: Warehouse, color: "text-green-600 bg-green-50" },
+        ].map((kpi) => (
+          <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-gray-500">{kpi.label}</p>
+              <span className={`rounded-lg p-1.5 ${kpi.color}`}>
+                <kpi.icon className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-2 text-xl font-bold text-gray-900">{kpi.value}</p>
+          </div>
+        ))}
       </div>
 
-      {lowStockItems.length > 0 && (
-        <div className="flex items-center gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200">
-          <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-          <p className="text-sm text-amber-800 font-medium">{lowStockItems.length} item(s) are running low on stock and need reordering</p>
+      {/* Filters */}
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search products..."
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          </div>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="All">All Status</option>
+            <option value="In Stock">In Stock</option>
+            <option value="Low Stock">Low Stock</option>
+            <option value="Out of Stock">Out of Stock</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Inventory table */}
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        {filtered.length === 0 ? (
+          <div className="py-16 text-center">
+            <Warehouse className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+            <p className="text-gray-500 font-medium">No inventory items found</p>
+            <p className="text-sm text-gray-400 mt-1">
+              {inventory.length === 0
+                ? "Add products first — inventory entries are created automatically"
+                : "Try adjusting your search or filter"}
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Product</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Category</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Stock</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Min Stock</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Last Updated</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Adjust</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filtered.map((item) => {
+                  const { label, color } = stockStatus(item.stock, item.minStock)
+                  const pct = item.minStock > 0
+                    ? Math.min(100, Math.round((item.stock / (item.minStock * 3)) * 100))
+                    : 100
+                  const barColor =
+                    label === "Out of Stock" ? "bg-red-500" :
+                    label === "Low Stock" ? "bg-yellow-500" : "bg-green-500"
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-gray-900">{item.productName}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                          {item.category}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="font-semibold text-gray-900">{item.stock}</span>
+                          <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className={`h-full ${barColor} rounded-full`} style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-500">{item.minStock}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${color}`}>{label}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-gray-500 text-xs">{item.lastUpdated || "—"}</td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => setAdjustItem(item)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+                        >
+                          Adjust
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Adjust Stock Modal ── */}
+      {adjustItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Adjust Stock</h2>
+              <button
+                onClick={() => { setAdjustItem(null); setAdjustAmount(""); setAdjustReason("") }}
+                className="p-1 rounded-lg hover:bg-gray-100"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="font-medium text-gray-900">{adjustItem.productName}</p>
+                <p className="text-sm text-gray-500 mt-0.5">Current stock: <strong>{adjustItem.stock}</strong></p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Adjustment Amount
+                </label>
+                <p className="text-xs text-gray-400 mb-2">Use positive (+) to add stock, negative (−) to remove</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAdjustAmount(String((parseInt(adjustAmount) || 0) - 1))}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-gray-600 hover:bg-gray-50"
+                  >
+                    <TrendingDown className="h-4 w-4" />
+                  </button>
+                  <input
+                    type="number"
+                    value={adjustAmount}
+                    onChange={(e) => setAdjustAmount(e.target.value)}
+                    className="flex-1 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-center font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="0"
+                  />
+                  <button
+                    onClick={() => setAdjustAmount(String((parseInt(adjustAmount) || 0) + 1))}
+                    className="rounded-lg border border-gray-200 px-3 py-2 text-gray-600 hover:bg-gray-50"
+                  >
+                    <TrendingUp className="h-4 w-4" />
+                  </button>
+                </div>
+                {adjustAmount && (
+                  <p className="text-xs text-indigo-600 mt-1.5">
+                    New stock: {Math.max(0, adjustItem.stock + (parseInt(adjustAmount) || 0))}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason (optional)</label>
+                <input
+                  value={adjustReason}
+                  onChange={(e) => setAdjustReason(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="e.g. Physical count correction"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
+              <button
+                onClick={() => { setAdjustItem(null); setAdjustAmount(""); setAdjustReason("") }}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAdjust}
+                disabled={!adjustAmount || adjustAmount === "0"}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Apply Adjustment
+              </button>
+            </div>
+          </div>
         </div>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Total Items" value={String(items.length)} subtitle="Unique products" icon={Package} />
-        <KpiCard title="Total Stock" value={String(totalStock)} subtitle="Units available" icon={Boxes} />
-        <KpiCard title="Low Stock Alerts" value={String(lowStockItems.length)} subtitle="Items need attention" icon={AlertTriangle} />
-        <KpiCard title="Well Stocked" value={String(wellStocked.length)} subtitle="Healthy inventory" icon={CheckCircle} />
-      </div>
-
-      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Inventory Overview</h2>
-          <p className="text-sm text-gray-500">Real-time stock levels and warehouse locations</p>
-          <div className="mt-4"><SearchInput placeholder="Search inventory by product, SKU, or category..." value={search} onChange={setSearch} /></div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Product</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">SKU</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Category</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Stock Level</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Min Stock</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Warehouse</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Last Restocked</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {filtered.map(item => (
-                <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{item.name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500 font-mono">{item.sku}</td>
-                  <td className="px-4 py-3"><span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">{item.category}</span></td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-24 bg-gray-100 rounded-full h-2">
-                        <div className={cn("h-2 rounded-full transition-all", getStockColor(item.stock, item.minStock, item.maxStock))} style={{ width: `${getStockPercent(item.stock, item.maxStock)}%` }} />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">{item.stock}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{item.minStock}</td>
-                  <td className="px-4 py-3"><span className="flex items-center gap-1 text-sm text-gray-600"><Warehouse className="h-3.5 w-3.5 text-gray-400" />{item.warehouse}</span></td>
-                  <td className="px-4 py-3">{item.stock < item.minStock ? <StatusBadge status="low-stock" /> : <StatusBadge status="active" />}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{formatDate(item.lastRestocked)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   )
 }

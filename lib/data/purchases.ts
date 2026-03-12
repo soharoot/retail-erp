@@ -1,4 +1,4 @@
-import type { PurchaseOrder } from "@/lib/types"
+import type { PurchaseOrder } from "@/lib/types/index"
 
 const purchases: PurchaseOrder[] = [
   {

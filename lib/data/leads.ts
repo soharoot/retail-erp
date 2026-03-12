@@ -1,4 +1,4 @@
-import type { Lead } from "@/lib/types"
+import type { Lead } from "@/lib/types/index"
 
 const leads: Lead[] = [
   {

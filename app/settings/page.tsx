@@ -1,34 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
+import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useI18n } from "@/lib/i18n/context"
 import { PageHeader } from "@/components/layout/page-header"
 import { Building2, Globe, CreditCard, Bell, Palette, Database, Save } from "lucide-react"
+import type { Settings } from "@/lib/types"
+import { defaultSettings } from "@/lib/types"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("company")
   const [saved, setSaved] = useState(false)
-  const [settings, setSettings] = useLocalStorage("erp-settings", {
-    companyName: "Retail ERP Corp",
-    address: "123 Business Avenue, Suite 100, New York, NY 10001",
-    phone: "+1 (555) 000-1234",
-    email: "contact@retailerp.com",
-    website: "www.retailerp.com",
-    taxId: "12-3456789",
-    currency: "USD",
-    taxRate: "10",
-    dateFormat: "MM/DD/YYYY",
-    timezone: "America/New_York",
-    language: "en",
-    emailNotifications: true,
-    lowStockAlerts: true,
-    orderNotifications: true,
-    reportEmails: false,
-    invoicePrefix: "INV",
-    poPrefix: "PO",
-    autoBackup: true,
-    twoFactor: false,
-  })
+  const [settings, setSettings] = useSupabaseData<Settings>("erp-settings", defaultSettings)
+  const { setLanguage } = useI18n()
 
   const handleSave = () => {
     setSaved(true)
@@ -94,7 +78,24 @@ export default function SettingsPage() {
                   <div><label className={labelClass}>Currency</label><select value={settings.currency} onChange={e => setSettings({...settings, currency: e.target.value})} className={inputClass}><option value="USD">USD - US Dollar</option><option value="EUR">EUR - Euro</option><option value="GBP">GBP - British Pound</option><option value="CAD">CAD - Canadian Dollar</option><option value="AUD">AUD - Australian Dollar</option></select></div>
                   <div><label className={labelClass}>Date Format</label><select value={settings.dateFormat} onChange={e => setSettings({...settings, dateFormat: e.target.value})} className={inputClass}><option value="MM/DD/YYYY">MM/DD/YYYY</option><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="YYYY-MM-DD">YYYY-MM-DD</option></select></div>
                   <div><label className={labelClass}>Timezone</label><select value={settings.timezone} onChange={e => setSettings({...settings, timezone: e.target.value})} className={inputClass}><option value="America/New_York">Eastern Time (ET)</option><option value="America/Chicago">Central Time (CT)</option><option value="America/Denver">Mountain Time (MT)</option><option value="America/Los_Angeles">Pacific Time (PT)</option><option value="Europe/London">GMT</option><option value="Europe/Paris">CET</option></select></div>
-                  <div><label className={labelClass}>Language</label><select value={settings.language} onChange={e => setSettings({...settings, language: e.target.value})} className={inputClass}><option value="en">English</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option></select></div>
+                  <div>
+                    <label className={labelClass}>Language</label>
+                    <select
+                      value={settings.language}
+                      onChange={e => {
+                        const lang = e.target.value
+                        setSettings({...settings, language: lang})
+                        setLanguage(lang as "en" | "fr" | "ar")
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="en">English</option>
+                      <option value="fr">French — Français</option>
+                      <option value="ar">Arabic — العربية</option>
+                      <option value="es">Spanish — Español</option>
+                      <option value="de">German — Deutsch</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             )}

@@ -1,103 +1,149 @@
 "use client"
 
 import { useState } from "react"
-import { KpiCard } from "@/components/shared/kpi-card"
-import { StatusBadge } from "@/components/shared/status-badge"
-import { DollarSign, TrendingUp, CreditCard, AlertCircle } from "lucide-react"
+import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area, PieChart, Pie, Cell, Legend,
-} from "recharts"
+import type { Sale, PurchaseOrder, SupplierDebt, Product } from "@/lib/types"
+import { DollarSign, TrendingUp, TrendingDown, Landmark, BarChart3 } from "lucide-react"
 
-const revenueData = [
-  { month: "Sep", revenue: 14200, expenses: 9800 },
-  { month: "Oct", revenue: 15800, expenses: 10100 },
-  { month: "Nov", revenue: 18200, expenses: 11500 },
-  { month: "Dec", revenue: 22100, expenses: 13800 },
-  { month: "Jan", revenue: 19800, expenses: 10900 },
-  { month: "Feb", revenue: 17500, expenses: 9800 },
-  { month: "Mar", revenue: 21300, expenses: 11200 },
-]
-
-const cashFlowData = [
-  { month: "Sep", inflow: 16000, outflow: 12000 },
-  { month: "Oct", inflow: 18500, outflow: 13200 },
-  { month: "Nov", inflow: 21000, outflow: 15500 },
-  { month: "Dec", inflow: 25000, outflow: 18000 },
-  { month: "Jan", inflow: 22000, outflow: 14500 },
-  { month: "Feb", inflow: 19500, outflow: 13000 },
-  { month: "Mar", inflow: 23500, outflow: 15000 },
-]
-
-const expenseCategories = [
-  { name: "Cost of Goods", value: 52800, color: "#6366f1" },
-  { name: "Salaries", value: 28000, color: "#22c55e" },
-  { name: "Marketing", value: 8400, color: "#f59e0b" },
-  { name: "Rent & Utilities", value: 6200, color: "#ef4444" },
-  { name: "Software & Tools", value: 3200, color: "#06b6d4" },
-  { name: "Other", value: 2300, color: "#8b5cf6" },
-]
-
-const receivables = [
-  { customer: "Carol Williams", amount: 3200, dueDate: "2025-02-28", daysOverdue: 9, status: "overdue" },
-  { customer: "David Lee", amount: 1800, dueDate: "2025-03-15", daysOverdue: 0, status: "pending" },
-  { customer: "Eva Martinez", amount: 4500, dueDate: "2025-03-01", daysOverdue: 8, status: "overdue" },
-  { customer: "Frank Wilson", amount: 950, dueDate: "2025-03-20", daysOverdue: 0, status: "pending" },
-  { customer: "Henry Brown", amount: 2200, dueDate: "2025-03-10", daysOverdue: 0, status: "pending" },
-]
-
-const payables = [
-  { supplier: "TechGear Wholesale", amount: 6250, dueDate: "2025-03-15", status: "pending" },
-  { supplier: "SportsPro Suppliers", amount: 1600, dueDate: "2025-03-10", status: "pending" },
-  { supplier: "HomeComfort Ltd", amount: 2800, dueDate: "2025-02-28", status: "overdue" },
-  { supplier: "Global Electronics Co", amount: 4200, dueDate: "2025-03-20", status: "pending" },
-]
+function lastNMonths(n: number) {
+  const result: { label: string; key: string }[] = []
+  const now = new Date()
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    result.push({
+      label: d.toLocaleString("default", { month: "short" }),
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    })
+  }
+  return result
+}
 
 export default function FinancialPage() {
-  const [activeTab, setActiveTab] = useState("overview")
+  const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
+  const [purchases] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
+  const [debts] = useSupabaseData<SupplierDebt[]>("erp-supplier-debts", [])
+  const [products] = useSupabaseData<Product[]>("erp-products", [])
+
+  const [activeTab, setActiveTab] = useState("pnl")
+
+  // ── Real KPI Calculations ────────────────────────────────────
+  const completedSales = sales.filter((s) => s.status === "completed")
+  const revenue = completedSales.reduce((sum, s) => sum + s.total, 0)
+
+  const cogs = completedSales
+    .flatMap((s) => s.items)
+    .reduce((sum, item) => sum + item.qty * item.costAtSale, 0)
+
+  const grossProfit = revenue - cogs
+  const grossMargin = revenue > 0 ? Math.round((grossProfit / revenue) * 100) : 0
+
+  const outstandingDebt = debts
+    .filter((d) => d.status !== "paid")
+    .reduce((sum, d) => sum + d.remainingDebt, 0)
+
+  const totalPurchases = purchases
+    .filter((p) => p.status !== "cancelled")
+    .reduce((sum, p) => sum + p.total, 0)
+
+  const totalPaid = purchases
+    .filter((p) => p.status !== "cancelled")
+    .reduce((sum, p) => sum + (p.amountPaid || 0), 0)
+
+  // ── Monthly P&L chart ────────────────────────────────────────
+  const months = lastNMonths(6)
+  const pnlData = months.map(({ label, key }) => {
+    const rev = completedSales
+      .filter((s) => s.date.startsWith(key))
+      .reduce((s, sale) => s + sale.total, 0)
+    const cost = completedSales
+      .filter((s) => s.date.startsWith(key))
+      .flatMap((s) => s.items)
+      .reduce((s, item) => s + item.qty * item.costAtSale, 0)
+    return { label, revenue: rev, cogs: cost, profit: rev - cost }
+  })
+  const maxPnl = Math.max(...pnlData.map((d) => Math.max(d.revenue, d.cogs)), 1)
 
   const tabs = [
-    { id: "overview", label: "Overview" },
-    { id: "expenses", label: "Expenses" },
-    { id: "receivable", label: "Accounts Receivable" },
+    { id: "pnl", label: "Profit & Loss" },
     { id: "payable", label: "Accounts Payable" },
+    { id: "purchases", label: "Purchase Summary" },
   ]
+
+  // Accounts payable = unpaid supplier debts
+  const unpaidDebts = debts.filter((d) => d.status !== "paid")
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Financial Overview</h1>
-        <p className="text-sm text-gray-500 mt-1">Monitor business performance and financial health</p>
+      <PageHeader
+        title="Financial Overview"
+        subtitle="Monitor your financial performance"
+      />
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            title: "Total Revenue",
+            value: formatCurrency(revenue),
+            icon: DollarSign,
+            color: "text-indigo-600 bg-indigo-50",
+            sub: `${completedSales.length} completed sales`,
+          },
+          {
+            title: "Gross Profit",
+            value: formatCurrency(grossProfit),
+            icon: TrendingUp,
+            color: grossProfit >= 0 ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50",
+            sub: `Margin: ${grossMargin}%`,
+          },
+          {
+            title: "Total Purchases",
+            value: formatCurrency(totalPurchases),
+            icon: TrendingDown,
+            color: "text-orange-600 bg-orange-50",
+            sub: `${purchases.filter((p) => p.status !== "cancelled").length} orders`,
+          },
+          {
+            title: "Outstanding Debt",
+            value: formatCurrency(outstandingDebt),
+            icon: Landmark,
+            color: outstandingDebt > 0 ? "text-red-600 bg-red-50" : "text-green-600 bg-green-50",
+            sub: `${unpaidDebts.length} unpaid debts`,
+          },
+        ].map((kpi) => (
+          <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-gray-500">{kpi.title}</p>
+              <span className={`rounded-lg p-2 ${kpi.color}`}>
+                <kpi.icon className="h-4 w-4" />
+              </span>
+            </div>
+            <p className="mt-3 text-2xl font-bold text-gray-900">{kpi.value}</p>
+            <p className="mt-1 text-xs text-gray-400">{kpi.sub}</p>
+          </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Total Revenue" value="$19,800" change={{ value: "12.5%", positive: true }} subtitle="from last month" icon={DollarSign} />
-        <KpiCard title="Net Profit" value="$8,900" subtitle="Profit margin: 44.9%" icon={TrendingUp} />
-        <KpiCard title="Total Expenses" value="$10,900" change={{ value: "5.2%", positive: false }} subtitle="from last month" icon={CreditCard} />
-        <KpiCard title="Outstanding Debt" value="$77,000" subtitle="$8,500 overdue" icon={AlertCircle} />
-      </div>
-
-      {/* Revenue vs Expenses Chart */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900">Revenue vs Expenses</h3>
-        <p className="text-sm text-gray-500 mb-4">Monthly comparison over the last 7 months</p>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={revenueData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-            <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" />
-            <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-            <Legend />
-            <Bar dataKey="revenue" name="Revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="expenses" name="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+      {/* Additional summary row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        {[
+          { label: "COGS", value: formatCurrency(cogs), sub: "Cost of goods sold" },
+          { label: "Cash Paid to Suppliers", value: formatCurrency(totalPaid), sub: "Total payments made" },
+          { label: "Remaining Payable", value: formatCurrency(outstandingDebt), sub: "Still owed to suppliers" },
+        ].map((item) => (
+          <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-medium text-gray-500">{item.label}</p>
+            <p className="mt-1.5 text-xl font-bold text-gray-900">{item.value}</p>
+            <p className="mt-0.5 text-xs text-gray-400">{item.sub}</p>
+          </div>
+        ))}
       </div>
 
       {/* Tabs */}
       <div className="flex gap-4 border-b border-gray-200">
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -112,194 +158,178 @@ export default function FinancialPage() {
         ))}
       </div>
 
-      {/* Overview Tab */}
-      {activeTab === "overview" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* P&L Summary */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Profit & Loss Summary</h3>
+      {/* ── P&L Tab ── */}
+      {activeTab === "pnl" && (
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-indigo-600" />
+            Revenue vs COGS — Last 6 Months
+          </h3>
+          {pnlData.every((d) => d.revenue === 0) ? (
+            <div className="py-12 text-center text-sm text-gray-400">
+              No sales data yet — create sales to see P&L
+            </div>
+          ) : (
             <div className="space-y-3">
-              {[
-                { label: "Total Revenue", value: 128900, bold: true },
-                { label: "Cost of Goods Sold", value: -52800 },
-                { label: "Gross Profit", value: 76100, bold: true, border: true },
-                { label: "Operating Expenses", value: -19600 },
-                { label: "Marketing & Advertising", value: -8400 },
-                { label: "Salaries & Wages", value: -28000 },
-                { label: "Rent & Utilities", value: -6200 },
-                { label: "Net Income", value: 13900, bold: true, border: true },
-              ].map((item, i) => (
-                <div key={i} className={`flex items-center justify-between py-2 ${item.border ? "border-t-2 border-gray-300 pt-3" : ""}`}>
-                  <span className={`text-sm ${item.bold ? "font-semibold text-gray-900" : "text-gray-600 pl-4"}`}>{item.label}</span>
-                  <span className={`text-sm ${item.bold ? "font-semibold" : ""} ${item.value >= 0 ? "text-gray-900" : "text-red-500"}`}>
-                    {item.value < 0 ? "-" : ""}{formatCurrency(Math.abs(item.value))}
-                  </span>
+              <div className="flex items-center gap-4 mb-2 text-xs">
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-indigo-500" /> Revenue</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-red-400" /> COGS</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-green-400" /> Profit</span>
+              </div>
+              {pnlData.map((d) => (
+                <div key={d.label}>
+                  <div className="flex items-center gap-3 text-xs mb-1">
+                    <span className="w-8 text-gray-500 text-right">{d.label}</span>
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-center gap-1">
+                        <div className="h-3 rounded-sm bg-indigo-500 min-w-[2px]" style={{ width: `${(d.revenue / maxPnl) * 100}%` }} />
+                        <span className="text-gray-500">{formatCurrency(d.revenue)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="h-3 rounded-sm bg-red-400 min-w-[2px]" style={{ width: `${(d.cogs / maxPnl) * 100}%` }} />
+                        <span className="text-gray-500">{formatCurrency(d.cogs)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className={`h-3 rounded-sm min-w-[2px] ${d.profit >= 0 ? "bg-green-400" : "bg-orange-400"}`}
+                          style={{ width: `${Math.abs(d.profit) / maxPnl * 100}%` }} />
+                        <span className={d.profit >= 0 ? "text-green-600" : "text-orange-500"}>{formatCurrency(d.profit)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
-          </div>
+          )}
 
-          {/* Cash Flow */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900">Monthly Cash Flow</h3>
-            <p className="text-sm text-gray-500 mb-4">Inflow vs outflow trends</p>
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={cashFlowData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="month" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                <Legend />
-                <Area type="monotone" dataKey="inflow" name="Cash In" stroke="#22c55e" fill="#22c55e" fillOpacity={0.1} strokeWidth={2} />
-                <Area type="monotone" dataKey="outflow" name="Cash Out" stroke="#ef4444" fill="#ef4444" fillOpacity={0.1} strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* Expenses Tab */}
-      {activeTab === "expenses" && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Expense Breakdown</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={expenseCategories}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={100}
-                  dataKey="value"
-                  label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                >
-                  {expenseCategories.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Expense Categories</h3>
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left pb-3 text-xs font-medium text-gray-500 uppercase">Category</th>
-                  <th className="text-right pb-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
-                  <th className="text-right pb-3 text-xs font-medium text-gray-500 uppercase">% of Total</th>
+          {/* Summary table */}
+          <div className="mt-6 border-t pt-4">
+            <table className="w-full text-sm">
+              <tbody className="space-y-2">
+                <tr className="border-b border-gray-100">
+                  <td className="py-2 text-gray-600">Revenue (Completed Sales)</td>
+                  <td className="py-2 text-right font-medium text-gray-900">{formatCurrency(revenue)}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {expenseCategories.map((cat, i) => {
-                  const total = expenseCategories.reduce((s, c) => s + c.value, 0)
-                  return (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }} />
-                          <span className="text-sm font-medium text-gray-900">{cat.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 text-right text-sm text-gray-600">{formatCurrency(cat.value)}</td>
-                      <td className="py-3 text-right text-sm text-gray-600">{((cat.value / total) * 100).toFixed(1)}%</td>
-                    </tr>
-                  )
-                })}
+                <tr className="border-b border-gray-100">
+                  <td className="py-2 text-gray-600">Cost of Goods Sold (COGS)</td>
+                  <td className="py-2 text-right font-medium text-red-600">-{formatCurrency(cogs)}</td>
+                </tr>
+                <tr className="border-b border-gray-100 font-semibold">
+                  <td className="py-2 text-gray-900">Gross Profit</td>
+                  <td className={`py-2 text-right ${grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>{formatCurrency(grossProfit)}</td>
+                </tr>
+                <tr>
+                  <td className="py-2 text-gray-500 text-xs">Gross Margin</td>
+                  <td className="py-2 text-right text-xs text-gray-500">{grossMargin}%</td>
+                </tr>
               </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-gray-300">
-                  <td className="pt-3 text-sm font-semibold text-gray-900">Total</td>
-                  <td className="pt-3 text-right text-sm font-semibold text-gray-900">{formatCurrency(expenseCategories.reduce((s, c) => s + c.value, 0))}</td>
-                  <td className="pt-3 text-right text-sm font-semibold text-gray-900">100%</td>
-                </tr>
-              </tfoot>
             </table>
           </div>
         </div>
       )}
 
-      {/* Accounts Receivable Tab */}
-      {activeTab === "receivable" && (
+      {/* ── Accounts Payable Tab ── */}
+      {activeTab === "payable" && (
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Outstanding Invoices</h3>
-            <p className="text-sm text-gray-500">Payments due from customers</p>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Customer</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Due Date</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Days Overdue</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {receivables.map((r, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{r.customer}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrency(r.amount)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{formatDate(r.dueDate)}</td>
-                  <td className="px-4 py-3 text-sm">
-                    {r.daysOverdue > 0 ? (
-                      <span className="text-red-600 font-medium">{r.daysOverdue} days</span>
-                    ) : (
-                      <span className="text-green-600">On time</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-gray-300 bg-gray-50">
-                <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total Outstanding</td>
-                <td className="px-4 py-3 text-sm font-bold text-indigo-600">{formatCurrency(receivables.reduce((s, r) => s + r.amount, 0))}</td>
-                <td colSpan={3} />
-              </tr>
-            </tfoot>
-          </table>
+          {unpaidDebts.length === 0 ? (
+            <div className="py-16 text-center">
+              <Landmark className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+              <p className="text-gray-500 font-medium">No outstanding debts</p>
+              <p className="text-sm text-gray-400 mt-1">All supplier payments are up to date</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Supplier</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Purchase Ref</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Total</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Paid</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Remaining</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {unpaidDebts.map((debt) => (
+                    <tr key={debt.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium text-gray-900">{debt.supplierName}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-500">{debt.purchaseId}</td>
+                      <td className="px-4 py-3 text-right text-gray-900">{formatCurrency(debt.totalAmount)}</td>
+                      <td className="px-4 py-3 text-right text-green-600">{formatCurrency(debt.amountPaid)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-red-600">{formatCurrency(debt.remainingDebt)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                          debt.status === "outstanding" ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
+                        }`}>
+                          {debt.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-200 bg-gray-50">
+                    <td colSpan={4} className="px-4 py-3 text-right font-semibold text-gray-900">Total Outstanding:</td>
+                    <td className="px-4 py-3 text-right font-bold text-red-600">{formatCurrency(outstandingDebt)}</td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Accounts Payable Tab */}
-      {activeTab === "payable" && (
+      {/* ── Purchases Summary Tab ── */}
+      {activeTab === "purchases" && (
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Bills to Pay</h3>
-            <p className="text-sm text-gray-500">Outstanding payments to suppliers</p>
-          </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Supplier</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Amount</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Due Date</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {payables.map((p, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{p.supplier}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrency(p.amount)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{formatDate(p.dueDate)}</td>
-                  <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="border-t-2 border-gray-300 bg-gray-50">
-                <td className="px-4 py-3 text-sm font-semibold text-gray-900">Total Payable</td>
-                <td className="px-4 py-3 text-sm font-bold text-red-600">{formatCurrency(payables.reduce((s, p) => s + p.amount, 0))}</td>
-                <td colSpan={2} />
-              </tr>
-            </tfoot>
-          </table>
+          {purchases.length === 0 ? (
+            <div className="py-16 text-center">
+              <BarChart3 className="mx-auto h-12 w-12 text-gray-300 mb-3" />
+              <p className="text-gray-500 font-medium">No purchase orders yet</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">PO #</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Supplier</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Date</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Total</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Paid</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Debt</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {purchases.map((po) => (
+                    <tr key={po.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-mono text-xs font-medium text-gray-900">{po.id}</td>
+                      <td className="px-4 py-3 text-gray-900">{po.supplier}</td>
+                      <td className="px-4 py-3 text-gray-500">{formatDate(po.date)}</td>
+                      <td className="px-4 py-3 text-right font-medium text-gray-900">{formatCurrency(po.total)}</td>
+                      <td className="px-4 py-3 text-right text-green-600">{formatCurrency(po.amountPaid || 0)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={(po.remainingDebt || 0) > 0 ? "text-red-600 font-medium" : "text-green-600"}>
+                          {formatCurrency(po.remainingDebt || 0)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                          po.status === "received" ? "bg-green-100 text-green-700" :
+                          po.status === "pending" ? "bg-yellow-100 text-yellow-700" :
+                          "bg-gray-100 text-gray-600"
+                        }`}>
+                          {po.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

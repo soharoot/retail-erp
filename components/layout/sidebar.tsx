@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/context"
 import {
   LayoutDashboard,
   Package,
@@ -24,25 +25,6 @@ import {
   ChevronLeft,
 } from "lucide-react"
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Products", href: "/products", icon: Package },
-  { name: "Inventory", href: "/inventory", icon: Warehouse },
-  { name: "Sales", href: "/sales", icon: ShoppingCart },
-  { name: "Purchases", href: "/purchases", icon: ClipboardList },
-  { name: "Suppliers", href: "/suppliers", icon: Truck },
-  { name: "Supplier Debts", href: "/supplier-debts", icon: Landmark },
-  { name: "Customers", href: "/customers", icon: Users },
-  { name: "Invoicing", href: "/invoicing", icon: FileText },
-  { name: "Financial", href: "/financial", icon: DollarSign },
-  { name: "HR & Employees", href: "/hr", icon: UserCog },
-  { name: "Projects", href: "/projects", icon: FolderKanban },
-  { name: "CRM", href: "/crm", icon: Target },
-  { name: "Reports", href: "/reports", icon: BarChart3 },
-  { name: "Settings", href: "/settings", icon: Settings },
-  { name: "User Management", href: "/users", icon: Shield },
-]
-
 interface SidebarProps {
   open: boolean
   onClose: () => void
@@ -52,6 +34,26 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname()
+  const { t } = useI18n()
+
+  const navigation = [
+    { nameKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { nameKey: "nav.products", href: "/products", icon: Package },
+    { nameKey: "nav.inventory", href: "/inventory", icon: Warehouse },
+    { nameKey: "nav.sales", href: "/sales", icon: ShoppingCart },
+    { nameKey: "nav.purchases", href: "/purchases", icon: ClipboardList },
+    { nameKey: "nav.suppliers", href: "/suppliers", icon: Truck },
+    { nameKey: "nav.supplierDebts", href: "/supplier-debts", icon: Landmark },
+    { nameKey: "nav.customers", href: "/customers", icon: Users },
+    { nameKey: "nav.invoicing", href: "/invoicing", icon: FileText },
+    { nameKey: "nav.financial", href: "/financial", icon: DollarSign },
+    { nameKey: "nav.hr", href: "/hr", icon: UserCog },
+    { nameKey: "nav.projects", href: "/projects", icon: FolderKanban },
+    { nameKey: "nav.crm", href: "/crm", icon: Target },
+    { nameKey: "nav.reports", href: "/reports", icon: BarChart3 },
+    { nameKey: "nav.settings", href: "/settings", icon: Settings },
+    { nameKey: "nav.userManagement", href: "/users", icon: Shield },
+  ]
 
   return (
     <>
@@ -104,13 +106,14 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         <nav className="flex-1 overflow-y-auto py-4 px-3">
           <ul className="space-y-1">
             {navigation.map((item) => {
+              const label = t(item.nameKey)
               const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
               return (
-                <li key={item.name}>
+                <li key={item.href}>
                   <Link
                     href={item.href}
                     onClick={onClose}
-                    title={collapsed ? item.name : undefined}
+                    title={collapsed ? label : undefined}
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                       isActive
@@ -120,7 +123,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
                     )}
                   >
                     <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive ? "text-white" : "text-gray-400")} />
-                    {!collapsed && <span>{item.name}</span>}
+                    {!collapsed && <span>{label}</span>}
                   </Link>
                 </li>
               )
@@ -142,7 +145,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         {!collapsed && (
           <div className="px-4 py-3 border-t border-gray-200">
             <p className="text-xs text-gray-400">System Version</p>
-            <p className="text-xs font-medium text-gray-600">v1.0.0</p>
+            <p className="text-xs font-medium text-gray-600">v2.0.0</p>
           </div>
         )}
       </aside>

@@ -1,4 +1,4 @@
-import type { Supplier } from "@/lib/types"
+import type { Supplier } from "@/lib/types/index"
 
 const suppliers: Supplier[] = [
   {

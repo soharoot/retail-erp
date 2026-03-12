@@ -1,4 +1,4 @@
-import type { Customer } from "@/lib/types"
+import type { Customer } from "@/lib/types/index"
 
 const customers: Customer[] = [
   {

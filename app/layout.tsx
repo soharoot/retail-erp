@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { AppShell } from "@/components/layout/app-shell"
 import { AuthProvider } from "@/lib/supabase/auth-context"
+import { I18nProvider } from "@/lib/i18n/context"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -23,7 +24,9 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased`}>
         <AuthProvider>
-          <AppShell>{children}</AppShell>
+          <I18nProvider>
+            <AppShell>{children}</AppShell>
+          </I18nProvider>
         </AuthProvider>
       </body>
     </html>

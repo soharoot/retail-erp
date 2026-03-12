@@ -1,4 +1,4 @@
-import type { Invoice } from "@/lib/types"
+import type { Invoice } from "@/lib/types/index"
 
 const invoices: Invoice[] = [
   {

@@ -2,6 +2,9 @@
 
 import { Bell, Search, Menu, User, LogOut } from "lucide-react"
 import { useAuth } from "@/lib/supabase/auth-context"
+import { useSupabaseData } from "@/hooks/use-supabase-data"
+import type { Settings } from "@/lib/types"
+import { defaultSettings } from "@/lib/types"
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -9,6 +12,7 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, signOut } = useAuth()
+  const [settings] = useSupabaseData<Settings>("erp-settings", defaultSettings)
 
   const displayName =
     user?.user_metadata?.full_name ||
@@ -25,7 +29,14 @@ export function Header({ onMenuClick }: HeaderProps) {
         <Menu className="h-5 w-5 text-gray-500" />
       </button>
 
-      <div className="flex-1 max-w-md">
+      {/* Company name — shown on small screens where sidebar is hidden */}
+      <div className="lg:hidden flex-shrink-0">
+        <p className="text-sm font-bold text-gray-900 truncate max-w-[120px]">
+          {settings.companyName}
+        </p>
+      </div>
+
+      <div className="flex-1 max-w-md hidden sm:block">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <input

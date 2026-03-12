@@ -1,4 +1,4 @@
-import type { Employee } from "@/lib/types"
+import type { Employee } from "@/lib/types/index"
 
 const employees: Employee[] = [
   {
