@@ -38,11 +38,13 @@ export default function ProductsPage() {
   const [filterCat, setFilterCat] = useState("All")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
-  // Guard: old Supabase data may not be a proper array
+  // Guard: Supabase data may not be a proper array (null, object, corrupted, etc.)
+  const safeProducts = (Array.isArray(products) ? products : []).filter(Boolean) as typeof products
+  const safeInventory = (Array.isArray(inventory) ? inventory : []).filter(Boolean) as typeof inventory
   const safeCategories = Array.isArray(categories) ? categories : DEFAULT_CATEGORIES
 
   // ── derived ────────────────────────────────────────────────
-  const filtered = products.filter((p) => {
+  const filtered = safeProducts.filter((p) => {
     const matchesSearch =
       (p.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (p.category ?? "").toLowerCase().includes(search.toLowerCase())
@@ -83,15 +85,15 @@ export default function ProductsPage() {
         ...editingProduct,
         name: form.name.trim(),
         category: form.category,
-        description: form.description.trim(),
+        description: (form.description ?? "").trim(),
         price,
         cost,
         status: form.status,
       }
-      setProducts(products.map((p) => (p.id === editingProduct.id ? updated : p)))
+      setProducts(safeProducts.map((p) => (p.id === editingProduct.id ? updated : p)))
       // Sync name/category in inventory
       setInventory(
-        inventory.map((i) =>
+        safeInventory.map((i) =>
           i.productId === editingProduct.id
             ? { ...i, productName: updated.name, category: updated.category }
             : i
@@ -102,13 +104,13 @@ export default function ProductsPage() {
         id: generateId(),
         name: form.name.trim(),
         category: form.category,
-        description: form.description.trim(),
+        description: (form.description ?? "").trim(),
         price,
         cost,
         status: form.status,
         createdAt: today,
       }
-      setProducts([...products, newProduct])
+      setProducts([...safeProducts, newProduct])
 
       // Auto-create inventory entry with stock = 0
       const invEntry: InventoryItem = {
@@ -120,7 +122,7 @@ export default function ProductsPage() {
         minStock: 10,
         lastUpdated: today,
       }
-      setInventory([...inventory, invEntry])
+      setInventory([...safeInventory, invEntry])
     }
 
     setShowModal(false)
@@ -128,8 +130,8 @@ export default function ProductsPage() {
 
   // ── delete ──────────────────────────────────────────────────
   const handleDelete = (id: string) => {
-    setProducts(products.filter((p) => p.id !== id))
-    setInventory(inventory.filter((i) => i.productId !== id))
+    setProducts(safeProducts.filter((p) => p.id !== id))
+    setInventory(safeInventory.filter((i) => i.productId !== id))
     setDeleteConfirm(null)
   }
 
@@ -143,12 +145,12 @@ export default function ProductsPage() {
   }
 
   const handleDeleteCategory = (cat: string) => {
-    const inUse = products.some((p) => p.category === cat)
+    const inUse = safeProducts.some((p) => p.category === cat)
     if (!inUse) setCategories(safeCategories.filter((c) => c !== cat))
   }
 
-  const totalProducts = products.length
-  const activeProducts = products.filter((p) => p.status === "active").length
+  const totalProducts = safeProducts.length
+  const activeProducts = safeProducts.filter((p) => p.status === "active").length
   const totalCategories = safeCategories.length
 
   const statusColor = (s: string) =>
@@ -221,9 +223,9 @@ export default function ProductsPage() {
             <Package className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 font-medium">No products found</p>
             <p className="text-sm text-gray-400 mt-1">
-              {products.length === 0 ? "Add your first product to get started" : "Try adjusting your search or filter"}
+              {safeProducts.length === 0 ? "Add your first product to get started" : "Try adjusting your search or filter"}
             </p>
-            {products.length === 0 && (
+            {safeProducts.length === 0 && (
               <button
                 onClick={openAdd}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
@@ -262,10 +264,10 @@ export default function ProductsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                      {formatCurrency(product.price)}
+                      {formatCurrency(product.price ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-600">
-                      {formatCurrency(product.cost)}
+                      {formatCurrency(product.cost ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor(product.status ?? "active")}`}>
@@ -314,7 +316,7 @@ export default function ProductsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Product Name *</label>
                 <input
-                  value={form.name}
+                  value={form.name ?? ""}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="e.g. Wireless Headphones"
@@ -362,7 +364,7 @@ export default function ProductsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
                 <textarea
-                  value={form.description}
+                  value={form.description ?? ""}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   rows={2}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -454,7 +456,7 @@ export default function ProductsPage() {
               </div>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {safeCategories.map((cat) => {
-                  const inUse = products.some((p) => p.category === cat)
+                  const inUse = safeProducts.some((p) => p.category === cat)
                   return (
                     <div key={cat} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
                       <span className="text-sm text-gray-700">{cat}</span>
