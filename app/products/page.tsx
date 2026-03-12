@@ -41,7 +41,15 @@ export default function ProductsPage() {
   // Guard: Supabase data may not be a proper array (null, object, corrupted, etc.)
   const safeProducts = (Array.isArray(products) ? products : []).filter(Boolean) as typeof products
   const safeInventory = (Array.isArray(inventory) ? inventory : []).filter(Boolean) as typeof inventory
-  const safeCategories = Array.isArray(categories) ? categories : DEFAULT_CATEGORIES
+  // Categories from Supabase may be old-format objects {id, name, color} — normalize to string[]
+  const rawCategories = Array.isArray(categories) ? categories : DEFAULT_CATEGORIES
+  const safeCategories = (rawCategories as unknown[])
+    .map((c) => {
+      if (typeof c === "string") return c
+      if (c && typeof c === "object" && "name" in (c as object)) return (c as { name: string }).name
+      return ""
+    })
+    .filter(Boolean) as string[]
 
   // ── derived ────────────────────────────────────────────────
   const filtered = safeProducts.filter((p) => {
