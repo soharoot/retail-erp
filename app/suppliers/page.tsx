@@ -51,10 +51,10 @@ export default function SuppliersPage() {
   const [form, setForm] = useState({ name: "", contactPerson: "", email: "", phone: "", address: "", status: "active" })
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null)
 
-  const filtered = suppliers.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.contactPerson.toLowerCase().includes(search.toLowerCase()) || s.email.toLowerCase().includes(search.toLowerCase()))
+  const filtered = suppliers.filter(s => (s.name ?? "").toLowerCase().includes(search.toLowerCase()) || (s.contactPerson ?? "").toLowerCase().includes(search.toLowerCase()) || (s.email ?? "").toLowerCase().includes(search.toLowerCase()))
   const active = suppliers.filter(s => s.status === "active").length
-  const totalOrders = suppliers.reduce((sum, s) => sum + s.orders, 0)
-  const totalSpent = suppliers.reduce((sum, s) => sum + s.totalSpent, 0)
+  const totalOrders = suppliers.reduce((sum, s) => sum + (s.orders ?? 0), 0)
+  const totalSpent = suppliers.reduce((sum, s) => sum + (s.totalSpent ?? 0), 0)
   const totalOutstandingDebt = debts.filter(d => d.status !== "paid").reduce((sum, d) => sum + d.remainingDebt, 0)
 
   // Get outstanding debt for a specific supplier

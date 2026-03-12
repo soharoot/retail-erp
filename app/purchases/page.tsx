@@ -71,8 +71,8 @@ export default function PurchasesPage() {
     activeTab === "all" ? orders : orders.filter((o) => o.status === activeTab)
   const filtered = tabFiltered.filter(
     (o) =>
-      o.id.toLowerCase().includes(search.toLowerCase()) ||
-      o.supplier.toLowerCase().includes(search.toLowerCase())
+      (o.id ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (o.supplier ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
   const totalOrders = orders.length

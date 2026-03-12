@@ -131,8 +131,8 @@ export default function SupplierDebtsPage() {
   ]
   const tabFiltered = activeTab === "all" ? debts : debts.filter(d => d.status === activeTab)
   const filtered = tabFiltered.filter(d =>
-    d.supplierName.toLowerCase().includes(search.toLowerCase()) ||
-    d.purchaseId.toLowerCase().includes(search.toLowerCase())
+    (d.supplierName ?? "").toLowerCase().includes(search.toLowerCase()) ||
+    (d.purchaseId ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
   const handleRecordPayment = () => {

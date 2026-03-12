@@ -41,8 +41,8 @@ export default function ProductsPage() {
   // ── derived ────────────────────────────────────────────────
   const filtered = products.filter((p) => {
     const matchesSearch =
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.category.toLowerCase().includes(search.toLowerCase())
+      (p.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (p.category ?? "").toLowerCase().includes(search.toLowerCase())
     const matchesCat = filterCat === "All" || p.category === filterCat
     return matchesSearch && matchesCat
   })
@@ -265,8 +265,8 @@ export default function ProductsPage() {
                       {formatCurrency(product.cost)}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor(product.status)}`}>
-                        {product.status.charAt(0).toUpperCase() + product.status.slice(1)}
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor(product.status ?? "active")}`}>
+                        {(product.status ?? "active").charAt(0).toUpperCase() + (product.status ?? "active").slice(1)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
