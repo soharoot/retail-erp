@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
@@ -27,6 +28,7 @@ const initialCustomers: Customer[] = [
 const segmentColors: Record<string, string> = { VIP: "bg-purple-100 text-purple-700", Regular: "bg-blue-100 text-blue-700", New: "bg-green-100 text-green-700" }
 
 export default function CustomersPage() {
+  const { t } = useI18n()
   const [customers, setCustomers] = useLocalStorage<Customer[]>("erp-customers", initialCustomers)
   const [search, setSearch] = useState("")
   const [showDialog, setShowDialog] = useState(false)
@@ -62,21 +64,21 @@ export default function CustomersPage() {
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">Customer Directory</h2>
-          <div className="mt-4"><SearchInput placeholder="Search customers by name, email, or company..." value={search} onChange={setSearch} /></div>
+          <div className="mt-4"><SearchInput placeholder={t("common.search")} value={search} onChange={setSearch} /></div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Name</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Email</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Phone</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.name")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.email")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.phone")}</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Company</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Orders</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Spent</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Segment</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.status")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -112,16 +114,16 @@ export default function CustomersPage() {
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Name</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label><input value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("common.name")}</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("common.email")}</label><input value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("common.phone")}</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Company</label><input value={form.company} onChange={e => setForm({...form, company: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-1">Segment</label><select value={form.segment} onChange={e => setForm({...form, segment: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option>VIP</option><option>Regular</option><option>New</option></select></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("common.status")}</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="active">{t("common.active")}</option><option value="inactive">{t("common.inactive")}</option></select></div>
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <button onClick={() => setShowDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">{editing ? "Save" : "Add Customer"}</button>
+                <button onClick={() => setShowDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">{t("common.cancel")}</button>
+                <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">{editing ? t("common.save") : "Add Customer"}</button>
               </div>
             </div>
           </div>

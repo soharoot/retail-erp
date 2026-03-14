@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency, formatDate } from "@/lib/utils"
@@ -29,6 +30,7 @@ export default function InvoicingPage() {
   const [purchases] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
   const [settings] = useSupabaseData<Settings>("erp-settings", defaultSettings)
 
+  const { t } = useI18n()
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<FilterType>("all")
   const [printInvoice, setPrintInvoice] = useState<UnifiedInvoice | null>(null)
@@ -119,17 +121,17 @@ export default function InvoicingPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Invoicing"
-        subtitle="Invoices auto-generated from your sales and purchases"
+        title={t("nav.invoicing")}
+        subtitle={t("nav.invoicing")}
       />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Invoices", value: String(allInvoices.length), icon: FileText, color: "text-indigo-600 bg-indigo-50" },
-          { label: "Sales Invoices", value: String(saleInvoices.length), icon: ShoppingCart, color: "text-green-600 bg-green-50" },
-          { label: "Purchase Invoices", value: String(purchaseInvoices.length), icon: ShoppingBag, color: "text-blue-600 bg-blue-50" },
-          { label: "Total Value", value: formatCurrency(totalValue), icon: TrendingUp, color: "text-purple-600 bg-purple-50" },
+          { label: t("common.total") + " " + t("nav.invoicing"), value: String(allInvoices.length), icon: FileText, color: "text-indigo-600 bg-indigo-50" },
+          { label: t("nav.sales") + " " + t("nav.invoicing"), value: String(saleInvoices.length), icon: ShoppingCart, color: "text-green-600 bg-green-50" },
+          { label: t("nav.purchases") + " " + t("nav.invoicing"), value: String(purchaseInvoices.length), icon: ShoppingBag, color: "text-blue-600 bg-blue-50" },
+          { label: t("supplierDebts.totalAmount"), value: formatCurrency(totalValue), icon: TrendingUp, color: "text-purple-600 bg-purple-50" },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -155,7 +157,7 @@ export default function InvoicingPage() {
                   filter === f ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
-                {f === "all" ? "All" : f === "sale" ? "Sales" : "Purchases"}
+                {f === "all" ? t("common.all") : f === "sale" ? t("nav.sales") : t("nav.purchases")}
               </button>
             ))}
           </div>
@@ -163,7 +165,7 @@ export default function InvoicingPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by ID or customer / supplier..."
+              placeholder={t("common.search")}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -176,7 +178,7 @@ export default function InvoicingPage() {
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
             <FileText className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-            <p className="text-gray-500 font-medium">No invoices found</p>
+            <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">
               {allInvoices.length === 0
                 ? "Invoices are generated automatically when you create sales or purchases"
@@ -189,12 +191,12 @@ export default function InvoicingPage() {
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Invoice #</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Type</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Date</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.status")}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.date")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Customer / Supplier</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Total</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Print</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("common.total")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.status")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.print")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -222,7 +224,7 @@ export default function InvoicingPage() {
                       <button
                         onClick={() => setPrintInvoice(inv)}
                         className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                        title="View & Print"
+                        title={t("common.print")}
                       >
                         <Printer className="h-4 w-4" />
                       </button>
@@ -244,14 +246,14 @@ export default function InvoicingPage() {
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-lg font-semibold text-gray-900">
-                {printInvoice.type === "sale" ? "Sales Invoice" : "Purchase Invoice"}
+                {printInvoice.type === "sale" ? t("nav.sales") + " " + t("nav.invoicing") : t("nav.purchases") + " " + t("nav.invoicing")}
               </h2>
               <div className="flex gap-2">
                 <button
                   onClick={() => window.print()}
                   className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
                 >
-                  <Printer className="h-4 w-4" /> Print
+                  <Printer className="h-4 w-4" /> {t("common.print")}
                 </button>
                 <button onClick={() => setPrintInvoice(null)} className="p-1 rounded-lg hover:bg-gray-100">
                   <X className="h-5 w-5 text-gray-500" />
@@ -292,7 +294,7 @@ export default function InvoicingPage() {
               {/* Party */}
               <div className="border-t pt-3 text-sm">
                 <p className="text-xs uppercase font-medium text-gray-500 mb-1">
-                  {printInvoice.type === "sale" ? "Bill To" : "Supplier"}
+                  {printInvoice.type === "sale" ? t("sales.customer") : t("purchases.supplier")}
                 </p>
                 <p className="font-semibold text-gray-900">{printInvoice.party}</p>
               </div>
@@ -323,17 +325,17 @@ export default function InvoicingPage() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={3} className="pt-3 text-right text-gray-500">Subtotal</td>
+                    <td colSpan={3} className="pt-3 text-right text-gray-500">{t("sales.subtotal")}</td>
                     <td className="pt-3 text-right text-gray-900">{formatCurrency(printInvoice.subtotal)}</td>
                   </tr>
                   {printInvoice.type === "sale" && (
                     <tr>
-                      <td colSpan={3} className="text-right text-gray-500">Tax ({taxRateLabel})</td>
+                      <td colSpan={3} className="text-right text-gray-500">{t("sales.tax")} ({taxRateLabel})</td>
                       <td className="text-right text-gray-900">{formatCurrency(printInvoice.tax)}</td>
                     </tr>
                   )}
                   <tr className="border-t">
-                    <td colSpan={3} className="pt-2 text-right font-bold text-gray-900">Total</td>
+                    <td colSpan={3} className="pt-2 text-right font-bold text-gray-900">{t("common.total")}</td>
                     <td className="pt-2 text-right font-bold text-indigo-600">
                       {formatCurrency(printInvoice.total)}
                     </td>

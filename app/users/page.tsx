@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { SearchInput } from "@/components/shared/search-input"
 import { Shield, Users, UserCheck, UserX, Pencil, Trash2, X, Key, Clock } from "lucide-react"
 import { formatDate } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/context"
 
 interface User {
   id: string
@@ -48,6 +49,7 @@ const permissions = {
 }
 
 export default function UsersPage() {
+  const { t } = useI18n()
   const [users, setUsers] = useLocalStorage<User[]>("erp-users", initialUsers)
   const [search, setSearch] = useState("")
   const [showDialog, setShowDialog] = useState(false)
@@ -108,21 +110,21 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="User Management" subtitle="Manage users, roles, and permissions" action={{ label: "Add User", onClick: () => { setEditingUser(null); setFormData({ name: "", email: "", role: "employee", department: "", status: "active" }); setShowDialog(true) } }} />
+      <PageHeader title={t("users.title")} subtitle={t("users.subtitle")} action={{ label: t("users.addUser"), onClick: () => { setEditingUser(null); setFormData({ name: "", email: "", role: "employee", department: "", status: "active" }); setShowDialog(true) } }} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Total Users" value={String(users.length)} subtitle="All accounts" icon={Users} />
-        <KpiCard title="Active Users" value={String(activeUsers)} subtitle="Currently active" icon={UserCheck} />
-        <KpiCard title="Administrators" value={String(admins)} subtitle="Full access" icon={Shield} />
-        <KpiCard title="Inactive Users" value={String(inactiveUsers)} subtitle="Disabled accounts" icon={UserX} />
+        <KpiCard title={t("users.totalUsers")} value={String(users.length)} subtitle="All accounts" icon={Users} />
+        <KpiCard title={t("users.activeUsers")} value={String(activeUsers)} subtitle="Currently active" icon={UserCheck} />
+        <KpiCard title={t("users.roles")} value={String(admins)} subtitle="Full access" icon={Shield} />
+        <KpiCard title={t("common.inactive")} value={String(inactiveUsers)} subtitle="Disabled accounts" icon={UserX} />
       </div>
 
       {/* Tabs */}
       <div className="flex gap-4 border-b border-gray-200">
         {[
-          { id: "users" as const, label: "User Directory" },
-          { id: "roles" as const, label: "Roles & Permissions" },
-          { id: "activity" as const, label: "Activity Log" },
+          { id: "users" as const, label: t("users.title") },
+          { id: "roles" as const, label: t("users.roles") },
+          { id: "activity" as const, label: t("users.activity") },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
             {tab.label}
@@ -132,7 +134,7 @@ export default function UsersPage() {
 
       {activeTab === "users" && (
         <>
-          <SearchInput placeholder="Search users by name, email, or department..." value={search} onChange={setSearch} />
+          <SearchInput placeholder={t("common.search")} value={search} onChange={setSearch} />
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
             <table className="w-full">
               <thead>

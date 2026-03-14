@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/context"
 import type { Sale, PurchaseOrder, SupplierDebt, InventoryItem, Product } from "@/lib/types"
 import {
   DollarSign, TrendingUp, TrendingDown, AlertTriangle,
@@ -25,6 +26,7 @@ function lastNMonths(n: number) {
 }
 
 export default function DashboardPage() {
+  const { t } = useI18n()
   const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
   const [purchases] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
   const [debts] = useSupabaseData<SupplierDebt[]>("erp-supplier-debts", [])
@@ -81,7 +83,7 @@ export default function DashboardPage() {
 
   const kpis = [
     {
-      title: "Total Revenue",
+      title: t("dashboard.totalRevenue"),
       value: formatCurrency(totalRevenue),
       icon: DollarSign,
       color: "text-indigo-600 bg-indigo-50",
@@ -89,7 +91,7 @@ export default function DashboardPage() {
       trend: "up",
     },
     {
-      title: "Net Profit",
+      title: t("dashboard.netProfit"),
       value: formatCurrency(netProfit),
       icon: TrendingUp,
       color: netProfit >= 0 ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50",
@@ -97,7 +99,7 @@ export default function DashboardPage() {
       trend: netProfit >= 0 ? "up" : "down",
     },
     {
-      title: "Total Expenses",
+      title: t("dashboard.totalExpenses"),
       value: formatCurrency(totalExpenses),
       icon: TrendingDown,
       color: "text-orange-600 bg-orange-50",
@@ -105,7 +107,7 @@ export default function DashboardPage() {
       trend: "neutral",
     },
     {
-      title: "Outstanding Debt",
+      title: t("dashboard.outstandingDebt"),
       value: formatCurrency(outstandingDebt),
       icon: Landmark,
       color: outstandingDebt > 0 ? "text-red-600 bg-red-50" : "text-green-600 bg-green-50",
@@ -118,8 +120,8 @@ export default function DashboardPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-500 mt-1">Welcome back! Here&apos;s your business overview</p>
+        <h1 className="text-2xl font-bold text-gray-900">{t("dashboard.title")}</h1>
+        <p className="text-sm text-gray-500 mt-1">{t("dashboard.subtitle")}</p>
       </div>
 
       {/* KPI Cards */}
@@ -142,7 +144,7 @@ export default function DashboardPage() {
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-gray-500">Inventory Value</p>
+            <p className="text-sm font-medium text-gray-500">{t("dashboard.inventoryValue")}</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(inventoryValue)}</p>
             <p className="text-xs text-gray-400 mt-1">{inventory.length} products in stock</p>
           </div>
@@ -155,7 +157,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue Chart */}
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Revenue &amp; Expenses (Last 6 months)</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">{t("dashboard.salesChart")}</h2>
           {chartData.every((d) => d.revenue === 0 && d.expenses === 0) ? (
             <div className="flex items-center justify-center h-40 text-sm text-gray-400">
               No data yet — create sales and purchases to see the chart
@@ -193,13 +195,13 @@ export default function DashboardPage() {
 
         {/* Quick Actions */}
         <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Quick Actions</h2>
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">{t("dashboard.quickActions")}</h2>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: "New Sale", href: "/sales", icon: ShoppingCart, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100" },
-              { label: "New Purchase", href: "/purchases", icon: ClipboardList, color: "bg-blue-50 text-blue-600 hover:bg-blue-100" },
-              { label: "Add Product", href: "/products", icon: Package, color: "bg-green-50 text-green-600 hover:bg-green-100" },
-              { label: "View Reports", href: "/reports", icon: BarChart3, color: "bg-purple-50 text-purple-600 hover:bg-purple-100" },
+              { label: t("dashboard.newSale"), href: "/sales", icon: ShoppingCart, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100" },
+              { label: t("dashboard.newPurchase"), href: "/purchases", icon: ClipboardList, color: "bg-blue-50 text-blue-600 hover:bg-blue-100" },
+              { label: t("dashboard.addProduct"), href: "/products", icon: Package, color: "bg-green-50 text-green-600 hover:bg-green-100" },
+              { label: t("dashboard.viewReports"), href: "/reports", icon: BarChart3, color: "bg-purple-50 text-purple-600 hover:bg-purple-100" },
             ].map((action) => (
               <Link
                 key={action.label}
@@ -218,12 +220,12 @@ export default function DashboardPage() {
         {/* Recent Transactions */}
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Recent Transactions</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{t("dashboard.recentTransactions")}</h2>
             <Link href="/sales" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">View all</Link>
           </div>
           {recentSales.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">
-              No transactions yet
+              {t("dashboard.noTransactions")}
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
@@ -250,12 +252,12 @@ export default function DashboardPage() {
         {/* Low Stock Alerts */}
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900">Low Stock Alerts</h2>
+            <h2 className="text-sm font-semibold text-gray-900">{t("dashboard.lowStockAlerts")}</h2>
             <Link href="/inventory" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">View all</Link>
           </div>
           {lowStockItems.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">
-              No low stock alerts
+              {t("dashboard.noLowStock")}
             </div>
           ) : (
             <div className="divide-y divide-gray-100">

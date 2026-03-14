@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
@@ -107,6 +108,7 @@ const initialPurchases: PurchaseOrder[] = [
 ]
 
 export default function SupplierDebtsPage() {
+  const { t } = useI18n()
   const [debts, setDebts] = useLocalStorage<SupplierDebt[]>("erp-supplier-debts", initialDebts)
   const [purchases, setPurchases] = useLocalStorage<PurchaseOrder[]>("erp-purchases", initialPurchases)
   const [search, setSearch] = useState("")
@@ -124,10 +126,10 @@ export default function SupplierDebtsPage() {
 
   // Filter by tab
   const tabs = [
-    { id: "all", label: "All Debts" },
-    { id: "outstanding", label: "Outstanding" },
-    { id: "partial", label: "Partial" },
-    { id: "paid", label: "Paid" },
+    { id: "all", label: t("common.all") },
+    { id: "outstanding", label: t("supplierDebts.outstanding") },
+    { id: "partial", label: t("supplierDebts.partial") },
+    { id: "paid", label: t("supplierDebts.paid") },
   ]
   const tabFiltered = activeTab === "all" ? debts : debts.filter(d => d.status === activeTab)
   const filtered = tabFiltered.filter(d =>
@@ -176,8 +178,8 @@ export default function SupplierDebtsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Supplier Debts"
-        subtitle="Track and manage supplier payment obligations"
+        title={t("supplierDebts.title")}
+        subtitle={t("supplierDebts.subtitle")}
       />
 
       {/* KPI Cards */}
@@ -209,20 +211,20 @@ export default function SupplierDebtsPage() {
       </div>
 
       {/* Search */}
-      <SearchInput placeholder="Search by supplier name or purchase reference..." value={search} onChange={setSearch} />
+      <SearchInput placeholder={t("common.search")} value={search} onChange={setSearch} />
 
       {/* Table */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Supplier</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Purchase Ref</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Amount</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Paid</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Remaining</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("purchases.supplier")}</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.purchaseRef")}</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.totalAmount")}</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.amountPaid")}</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.remainingDebt")}</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.status")}</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -230,7 +232,7 @@ export default function SupplierDebtsPage() {
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
                   <Landmark className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  No debts found
+                  {t("common.noData")}
                 </td>
               </tr>
             ) : (
@@ -258,7 +260,7 @@ export default function SupplierDebtsPage() {
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
                         >
                           <DollarSign className="h-3.5 w-3.5" />
-                          Pay
+                          {t("supplierDebts.payTranche")}
                         </button>
                       )}
                       <button
@@ -290,15 +292,15 @@ export default function SupplierDebtsPage() {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg text-sm">
                 <div>
-                  <span className="text-gray-500">Total Debt</span>
+                  <span className="text-gray-500">{t("supplierDebts.totalDebt")}</span>
                   <p className="font-semibold text-gray-900">{formatCurrency(paymentDialog.totalAmount)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Already Paid</span>
+                  <span className="text-gray-500">{t("supplierDebts.totalPaid")}</span>
                   <p className="font-semibold text-green-600">{formatCurrency(paymentDialog.amountPaid)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Remaining</span>
+                  <span className="text-gray-500">{t("supplierDebts.remainingTotal")}</span>
                   <p className="font-semibold text-red-600">{formatCurrency(paymentDialog.remainingDebt)}</p>
                 </div>
                 <div>
@@ -308,7 +310,7 @@ export default function SupplierDebtsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Amount</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("supplierDebts.paymentAmount")}</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
                   <input
@@ -345,14 +347,14 @@ export default function SupplierDebtsPage() {
                   onClick={() => setPaymentDialog(null)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   onClick={handleRecordPayment}
                   disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || parseFloat(paymentAmount) > paymentDialog.remainingDebt}
                   className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Record Payment
+                  {t("common.save")}
                 </button>
               </div>
             </div>
@@ -374,27 +376,27 @@ export default function SupplierDebtsPage() {
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-500">Supplier</span>
+                  <span className="text-gray-500">{t("purchases.supplier")}</span>
                   <p className="font-medium text-gray-900">{detailDialog.supplierName}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Purchase Ref</span>
+                  <span className="text-gray-500">{t("supplierDebts.purchaseRef")}</span>
                   <p className="font-medium font-mono text-gray-900">{detailDialog.purchaseId}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Total Amount</span>
+                  <span className="text-gray-500">{t("supplierDebts.totalAmount")}</span>
                   <p className="font-medium text-gray-900">{formatCurrency(detailDialog.totalAmount)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Status</span>
+                  <span className="text-gray-500">{t("common.status")}</span>
                   <div className="mt-1"><StatusBadge status={detailDialog.status} /></div>
                 </div>
                 <div>
-                  <span className="text-gray-500">Amount Paid</span>
+                  <span className="text-gray-500">{t("supplierDebts.amountPaid")}</span>
                   <p className="font-medium text-green-600">{formatCurrency(detailDialog.amountPaid)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Remaining</span>
+                  <span className="text-gray-500">{t("supplierDebts.remainingDebt")}</span>
                   <p className={`font-medium ${detailDialog.remainingDebt > 0 ? "text-red-600" : "text-green-600"}`}>
                     {formatCurrency(detailDialog.remainingDebt)}
                   </p>
@@ -421,7 +423,7 @@ export default function SupplierDebtsPage() {
 
               {/* Payment history */}
               <div className="border-t pt-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">Payment History</h4>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">{t("supplierDebts.paymentHistory")}</h4>
                 {detailDialog.payments.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-4">No payments recorded yet</p>
                 ) : (

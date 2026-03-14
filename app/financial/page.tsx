@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency, formatDate } from "@/lib/utils"
@@ -21,6 +22,7 @@ function lastNMonths(n: number) {
 }
 
 export default function FinancialPage() {
+  const { t } = useI18n()
   const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
   const [purchases] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
   const [debts] = useSupabaseData<SupplierDebt[]>("erp-supplier-debts", [])
@@ -66,9 +68,9 @@ export default function FinancialPage() {
   const maxPnl = Math.max(...pnlData.map((d) => Math.max(d.revenue, d.cogs)), 1)
 
   const tabs = [
-    { id: "pnl", label: "Profit & Loss" },
-    { id: "payable", label: "Accounts Payable" },
-    { id: "purchases", label: "Purchase Summary" },
+    { id: "pnl", label: t("financial.pnl") },
+    { id: "payable", label: t("financial.accountsPayable") },
+    { id: "purchases", label: t("financial.totalPurchases") },
   ]
 
   // Accounts payable = unpaid supplier debts
@@ -77,36 +79,36 @@ export default function FinancialPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Financial Overview"
-        subtitle="Monitor your financial performance"
+        title={t("financial.title")}
+        subtitle={t("financial.subtitle")}
       />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
-            title: "Total Revenue",
+            title: t("financial.revenue"),
             value: formatCurrency(revenue),
             icon: DollarSign,
             color: "text-indigo-600 bg-indigo-50",
             sub: `${completedSales.length} completed sales`,
           },
           {
-            title: "Gross Profit",
+            title: t("financial.grossProfit"),
             value: formatCurrency(grossProfit),
             icon: TrendingUp,
             color: grossProfit >= 0 ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50",
             sub: `Margin: ${grossMargin}%`,
           },
           {
-            title: "Total Purchases",
+            title: t("financial.totalPurchases"),
             value: formatCurrency(totalPurchases),
             icon: TrendingDown,
             color: "text-orange-600 bg-orange-50",
             sub: `${purchases.filter((p) => p.status !== "cancelled").length} orders`,
           },
           {
-            title: "Outstanding Debt",
+            title: t("financial.outstandingDebt"),
             value: formatCurrency(outstandingDebt),
             icon: Landmark,
             color: outstandingDebt > 0 ? "text-red-600 bg-red-50" : "text-green-600 bg-green-50",
@@ -129,9 +131,9 @@ export default function FinancialPage() {
       {/* Additional summary row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
-          { label: "COGS", value: formatCurrency(cogs), sub: "Cost of goods sold" },
-          { label: "Cash Paid to Suppliers", value: formatCurrency(totalPaid), sub: "Total payments made" },
-          { label: "Remaining Payable", value: formatCurrency(outstandingDebt), sub: "Still owed to suppliers" },
+          { label: t("financial.cogs"), value: formatCurrency(cogs), sub: "Cost of goods sold" },
+          { label: t("financial.cashFlow"), value: formatCurrency(totalPaid), sub: "Total payments made" },
+          { label: t("financial.accountsPayable"), value: formatCurrency(outstandingDebt), sub: "Still owed to suppliers" },
         ].map((item) => (
           <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <p className="text-xs font-medium text-gray-500">{item.label}</p>
@@ -206,15 +208,15 @@ export default function FinancialPage() {
             <table className="w-full text-sm">
               <tbody className="space-y-2">
                 <tr className="border-b border-gray-100">
-                  <td className="py-2 text-gray-600">Revenue (Completed Sales)</td>
+                  <td className="py-2 text-gray-600">{t("financial.revenue")}</td>
                   <td className="py-2 text-right font-medium text-gray-900">{formatCurrency(revenue)}</td>
                 </tr>
                 <tr className="border-b border-gray-100">
-                  <td className="py-2 text-gray-600">Cost of Goods Sold (COGS)</td>
+                  <td className="py-2 text-gray-600">{t("financial.cogs")}</td>
                   <td className="py-2 text-right font-medium text-red-600">-{formatCurrency(cogs)}</td>
                 </tr>
                 <tr className="border-b border-gray-100 font-semibold">
-                  <td className="py-2 text-gray-900">Gross Profit</td>
+                  <td className="py-2 text-gray-900">{t("financial.grossProfit")}</td>
                   <td className={`py-2 text-right ${grossProfit >= 0 ? "text-green-600" : "text-red-600"}`}>{formatCurrency(grossProfit)}</td>
                 </tr>
                 <tr>
@@ -241,12 +243,12 @@ export default function FinancialPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Supplier</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Purchase Ref</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Total</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Paid</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Remaining</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("purchases.supplier")}</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("supplierDebts.purchaseRef")}</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("supplierDebts.totalAmount")}</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("supplierDebts.amountPaid")}</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("supplierDebts.remainingDebt")}</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.status")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -294,12 +296,12 @@ export default function FinancialPage() {
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50">
                     <th className="px-4 py-3 text-left font-semibold text-gray-600">PO #</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Supplier</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-600">Date</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Total</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Paid</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-600">Debt</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("purchases.supplier")}</th>
+                    <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.date")}</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("supplierDebts.totalAmount")}</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("supplierDebts.amountPaid")}</th>
+                    <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("supplierDebts.remainingDebt")}</th>
+                    <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.status")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">

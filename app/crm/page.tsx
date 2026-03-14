@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { SearchInput } from "@/components/shared/search-input"
 import { Target, Users, DollarSign, TrendingUp, Mail, Phone, Building2, Calendar, X, GripVertical } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/context"
 
 interface Lead {
   id: string
@@ -48,6 +49,7 @@ const stageColors: Record<string, string> = {
 }
 
 export default function CRMPage() {
+  const { t } = useI18n()
   const [leads, setLeads] = useLocalStorage<Lead[]>("erp-leads", initialLeads)
   const [search, setSearch] = useState("")
   const [view, setView] = useState<"kanban" | "table">("kanban")
@@ -81,13 +83,13 @@ export default function CRMPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="CRM" subtitle="Manage leads and track your sales pipeline" action={{ label: "Add Lead", onClick: () => setShowDialog(true) }} />
+      <PageHeader title={t("crm.title")} subtitle={t("crm.subtitle")} action={{ label: t("crm.addLead"), onClick: () => setShowDialog(true) }} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Total Pipeline" value={formatCurrency(totalValue)} subtitle="All leads" icon={DollarSign} />
-        <KpiCard title="Active Leads" value={String(activeLeads)} subtitle="In pipeline" icon={Target} />
-        <KpiCard title="Won Deals" value={formatCurrency(wonValue)} subtitle="Closed revenue" icon={TrendingUp} />
-        <KpiCard title="Conversion Rate" value={`${conversionRate}%`} subtitle="Won / Total" icon={Users} />
+        <KpiCard title={t("crm.totalValue")} value={formatCurrency(totalValue)} subtitle="All leads" icon={DollarSign} />
+        <KpiCard title={t("crm.totalLeads")} value={String(activeLeads)} subtitle="In pipeline" icon={Target} />
+        <KpiCard title={t("crm.converted")} value={formatCurrency(wonValue)} subtitle="Closed revenue" icon={TrendingUp} />
+        <KpiCard title={t("crm.qualified")} value={`${conversionRate}%`} subtitle="Won / Total" icon={Users} />
       </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

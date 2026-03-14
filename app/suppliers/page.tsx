@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
@@ -42,6 +43,7 @@ const initialPurchases: PurchaseOrder[] = [
 ]
 
 export default function SuppliersPage() {
+  const { t } = useI18n()
   const [suppliers, setSuppliers] = useLocalStorage<Supplier[]>("erp-suppliers", initialSuppliers)
   const [purchases] = useLocalStorage<PurchaseOrder[]>("erp-purchases", initialPurchases)
   const [debts] = useLocalStorage<SupplierDebt[]>("erp-supplier-debts", [])
@@ -105,12 +107,12 @@ export default function SuppliersPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="Supplier Management" subtitle="Manage suppliers and track purchase history" action={{ label: "Add Supplier", onClick: () => { setEditing(null); setForm({ name: "", contactPerson: "", email: "", phone: "", address: "", status: "active" }); setShowDialog(true) } }} />
+      <PageHeader title={t("suppliers.title")} subtitle={t("suppliers.subtitle")} action={{ label: t("suppliers.addSupplier"), onClick: () => { setEditing(null); setForm({ name: "", contactPerson: "", email: "", phone: "", address: "", status: "active" }); setShowDialog(true) } }} />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Active Suppliers" value={String(active)} subtitle="Currently active" icon={Truck} />
-        <KpiCard title="Total Orders" value={String(totalOrders)} subtitle="All time orders" icon={ShoppingBag} />
-        <KpiCard title="Total Spent" value={formatCurrency(totalSpent)} subtitle="All time spending" icon={DollarSign} />
+        <KpiCard title={t("suppliers.activeSuppliers")} value={String(active)} subtitle="Currently active" icon={Truck} />
+        <KpiCard title={t("suppliers.totalOrders")} value={String(totalOrders)} subtitle="All time orders" icon={ShoppingBag} />
+        <KpiCard title={t("suppliers.totalSpent")} value={formatCurrency(totalSpent)} subtitle="All time spending" icon={DollarSign} />
         <KpiCard title="Outstanding Debt" value={formatCurrency(totalOutstandingDebt)} subtitle="Unpaid balances" icon={Landmark} />
       </div>
 
@@ -118,20 +120,20 @@ export default function SuppliersPage() {
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900">All Suppliers</h2>
           <p className="text-sm text-gray-500">View and manage supplier information</p>
-          <div className="mt-4"><SearchInput placeholder="Search suppliers by name, contact, or email..." value={search} onChange={setSearch} /></div>
+          <div className="mt-4"><SearchInput placeholder={t("common.search")} value={search} onChange={setSearch} /></div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Supplier Name</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Contact Person</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.name")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("suppliers.contactPerson")}</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Contact Info</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Orders</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Total Spent</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("suppliers.totalOrders")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("suppliers.totalSpent")}</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Outstanding Debt</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.status")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -176,21 +178,21 @@ export default function SuppliersPage() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowDialog(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-lg font-bold text-gray-900">{editing ? "Edit Supplier" : "Add Supplier"}</h2>
+              <h2 className="text-lg font-bold text-gray-900">{editing ? t("suppliers.editSupplier") : t("suppliers.addSupplier")}</h2>
               <button onClick={() => setShowDialog(false)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
             </div>
             <div className="p-6 space-y-4">
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label><input value={form.contactPerson} onChange={e => setForm({...form, contactPerson: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label><input value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Phone</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("suppliers.contactPerson")}</label><input value={form.contactPerson} onChange={e => setForm({...form, contactPerson: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("common.email")}</label><input value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("common.phone")}</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("common.status")}</label><select value={form.status} onChange={e => setForm({...form, status: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="active">{t("common.active")}</option><option value="inactive">{t("common.inactive")}</option></select></div>
               </div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Address</label><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">{t("common.address")}</label><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
               <div className="flex justify-end gap-3 pt-4 border-t">
-                <button onClick={() => setShowDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">{editing ? "Save" : "Add Supplier"}</button>
+                <button onClick={() => setShowDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">{t("common.cancel")}</button>
+                <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">{editing ? t("common.save") : t("suppliers.addSupplier")}</button>
               </div>
             </div>
           </div>
@@ -202,7 +204,7 @@ export default function SuppliersPage() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setDeleteTarget(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-lg font-bold text-gray-900">Delete Supplier</h2>
+              <h2 className="text-lg font-bold text-gray-900">{t("suppliers.deleteSupplier")}</h2>
               <button onClick={() => setDeleteTarget(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
             </div>
             <div className="p-6 space-y-4">
@@ -212,8 +214,8 @@ export default function SuppliersPage() {
                     Are you sure you want to delete <span className="font-semibold text-gray-900">{deleteTarget.name}</span>? This action cannot be undone.
                   </p>
                   <div className="flex justify-end gap-3 pt-4 border-t">
-                    <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                    <button onClick={confirmDelete} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">Delete</button>
+                    <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">{t("common.cancel")}</button>
+                    <button onClick={confirmDelete} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700">{t("common.delete")}</button>
                   </div>
                 </>
               ) : (

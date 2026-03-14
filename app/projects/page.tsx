@@ -16,6 +16,7 @@ import {
 import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/context"
 
 interface Task {
   id: string
@@ -185,6 +186,7 @@ const emptyTaskForm = {
 }
 
 export default function ProjectsPage() {
+  const { t } = useI18n()
   const [projects, setProjects] = useLocalStorage<Project[]>("erp-projects", initialProjects)
   const [activeTab, setActiveTab] = useState<string>("All Projects")
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
@@ -264,17 +266,17 @@ export default function ProjectsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Projects"
-        subtitle="Manage projects and track progress"
-        action={{ label: "New Project", onClick: () => { setForm(emptyProjectForm); setShowCreateDialog(true) } }}
+        title={t("projects.title")}
+        subtitle={t("projects.subtitle")}
+        action={{ label: t("projects.addProject"), onClick: () => { setForm(emptyProjectForm); setShowCreateDialog(true) } }}
       />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Total Projects" value={totalProjects.toString()} icon={FolderKanban} subtitle="All projects" />
-        <KpiCard title="Active Projects" value={activeProjects.toString()} icon={PlayCircle} subtitle="Currently running" />
-        <KpiCard title="Completed" value={completedProjects.toString()} icon={CheckCircle2} subtitle="Successfully delivered" />
-        <KpiCard title="Total Budget" value={formatCurrency(totalBudget)} icon={DollarSign} subtitle="Across all projects" />
+        <KpiCard title={t("projects.totalProjects")} value={totalProjects.toString()} icon={FolderKanban} subtitle="All projects" />
+        <KpiCard title={t("projects.activeProjects")} value={activeProjects.toString()} icon={PlayCircle} subtitle="Currently running" />
+        <KpiCard title={t("projects.completed")} value={completedProjects.toString()} icon={CheckCircle2} subtitle="Successfully delivered" />
+        <KpiCard title={t("projects.totalBudget")} value={formatCurrency(totalBudget)} icon={DollarSign} subtitle="Across all projects" />
       </div>
 
       {/* Project Detail Panel */}

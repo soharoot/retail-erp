@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { generateId, formatCurrency } from "@/lib/utils"
@@ -22,6 +23,7 @@ const emptyForm = {
 }
 
 export default function ProductsPage() {
+  const { t } = useI18n()
   const [products, setProducts] = useSupabaseData<Product[]>("erp-products", [])
   const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
   const [categories, setCategories] = useSupabaseData<string[]>(
@@ -167,18 +169,18 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Product Catalog"
-        subtitle="Manage your products and categories"
-        action={{ label: "Add Product", onClick: openAdd }}
+        title={t("products.title")}
+        subtitle={t("products.subtitle")}
+        action={{ label: t("products.addProduct"), onClick: openAdd }}
       />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Products", value: totalProducts, icon: Package, color: "text-indigo-600 bg-indigo-50" },
-          { label: "Active Products", value: activeProducts, icon: Package, color: "text-green-600 bg-green-50" },
-          { label: "Categories", value: totalCategories, icon: Tag, color: "text-purple-600 bg-purple-50" },
-          { label: "Inactive", value: totalProducts - activeProducts, icon: Package, color: "text-gray-600 bg-gray-50" },
+          { label: t("products.totalProducts"), value: totalProducts, icon: Package, color: "text-indigo-600 bg-indigo-50" },
+          { label: t("products.activeProducts"), value: activeProducts, icon: Package, color: "text-green-600 bg-green-50" },
+          { label: t("products.categories"), value: totalCategories, icon: Tag, color: "text-purple-600 bg-purple-50" },
+          { label: t("products.lowStock"), value: totalProducts - activeProducts, icon: Package, color: "text-gray-600 bg-gray-50" },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -199,7 +201,7 @@ export default function ProductsPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search products..."
+              placeholder={t("common.search")}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -219,7 +221,7 @@ export default function ProductsPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             <Tag className="h-4 w-4" />
-            Manage Categories
+            {t("products.manageCategories")}
           </button>
         </div>
       </div>
@@ -229,7 +231,7 @@ export default function ProductsPage() {
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
             <Package className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-            <p className="text-gray-500 font-medium">No products found</p>
+            <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">
               {safeProducts.length === 0 ? "Add your first product to get started" : "Try adjusting your search or filter"}
             </p>
@@ -238,7 +240,7 @@ export default function ProductsPage() {
                 onClick={openAdd}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
               >
-                <Plus className="h-4 w-4" /> Add Product
+                <Plus className="h-4 w-4" /> {t("products.addProduct")}
               </button>
             )}
           </div>
@@ -247,12 +249,12 @@ export default function ProductsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Product</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Category</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Selling Price</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Cost Price</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Actions</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("products.productName")}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.category")}</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("products.sellingPrice")}</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("products.costPrice")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.status")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -279,7 +281,7 @@ export default function ProductsPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor(product.status ?? "active")}`}>
-                        {(product.status ?? "active").charAt(0).toUpperCase() + (product.status ?? "active").slice(1)}
+                        {(product.status ?? "active") === "active" ? t("common.active") : t("common.inactive")}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -287,14 +289,14 @@ export default function ProductsPage() {
                         <button
                           onClick={() => openEdit(product)}
                           className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                          title="Edit"
+                          title={t("products.editProduct")}
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => setDeleteConfirm(product.id)}
                           className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          title="Delete"
+                          title={t("products.deleteProduct")}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -314,7 +316,7 @@ export default function ProductsPage() {
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-lg font-semibold text-gray-900">
-                {editingProduct ? "Edit Product" : "Add Product"}
+                {editingProduct ? t("products.editProduct") : t("products.addProduct")}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1 rounded-lg hover:bg-gray-100">
                 <X className="h-5 w-5 text-gray-500" />
@@ -322,7 +324,7 @@ export default function ProductsPage() {
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Product Name *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.productName")} *</label>
                 <input
                   value={form.name ?? ""}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -331,7 +333,7 @@ export default function ProductsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Category *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.category")} *</label>
                 <select
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -345,7 +347,7 @@ export default function ProductsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Selling Price</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.sellingPrice")}</label>
                   <input
                     type="number"
                     min="0"
@@ -357,7 +359,7 @@ export default function ProductsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Cost Price</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.costPrice")}</label>
                   <input
                     type="number"
                     min="0"
@@ -370,7 +372,7 @@ export default function ProductsPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Description</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.description")}</label>
                 <textarea
                   value={form.description ?? ""}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
@@ -380,14 +382,14 @@ export default function ProductsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.status")}</label>
                 <select
                   value={form.status}
                   onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="active">{t("common.active")}</option>
+                  <option value="inactive">{t("common.inactive")}</option>
                 </select>
               </div>
             </div>
@@ -396,14 +398,14 @@ export default function ProductsPage() {
                 onClick={() => setShowModal(false)}
                 className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleSave}
                 disabled={!form.name.trim() || !form.category}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {editingProduct ? "Save Changes" : "Add Product"}
+                {editingProduct ? t("common.save") : t("products.addProduct")}
               </button>
             </div>
           </div>
@@ -414,22 +416,22 @@ export default function ProductsPage() {
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Product?</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("products.deleteProduct")}</h3>
             <p className="text-sm text-gray-500 mb-6">
-              This will also remove the product from inventory. This action cannot be undone.
+              {t("products.deleteConfirm")}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteConfirm(null)}
                 className="flex-1 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => handleDelete(deleteConfirm)}
                 className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
               >
-                Delete
+                {t("common.delete")}
               </button>
             </div>
           </div>
@@ -441,7 +443,7 @@ export default function ProductsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">Manage Categories</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("products.categoriesTitle")}</h2>
               <button onClick={() => setShowCatModal(false)} className="p-1 rounded-lg hover:bg-gray-100">
                 <X className="h-5 w-5 text-gray-500" />
               </button>
@@ -452,7 +454,7 @@ export default function ProductsPage() {
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
-                  placeholder="New category name"
+                  placeholder={t("products.categoryName")}
                   className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <button

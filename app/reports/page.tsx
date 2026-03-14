@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency } from "@/lib/utils"
@@ -21,6 +22,7 @@ function lastNMonths(n: number) {
 }
 
 export default function ReportsPage() {
+  const { t } = useI18n()
   const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
   const [inventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
   const [products] = useSupabaseData<Product[]>("erp-products", [])
@@ -90,26 +92,26 @@ export default function ReportsPage() {
     .slice(0, 5)
 
   const tabs = [
-    { id: "sales", label: "Sales", icon: TrendingUp },
-    { id: "products", label: "Top Products", icon: Package },
-    { id: "inventory", label: "Inventory", icon: BarChart3 },
-    { id: "customers", label: "Customers", icon: Users },
+    { id: "sales", label: t("reports.salesByMonth"), icon: TrendingUp },
+    { id: "products", label: t("reports.topProducts"), icon: Package },
+    { id: "inventory", label: t("reports.inventoryByCategory"), icon: BarChart3 },
+    { id: "customers", label: t("reports.customerReport"), icon: Users },
   ]
 
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Reports & Analytics"
-        subtitle="Business insights and performance reports"
+        title={t("reports.title")}
+        subtitle={t("reports.subtitle")}
       />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Revenue", value: formatCurrency(totalRevenue), icon: TrendingUp, color: "text-indigo-600 bg-indigo-50" },
-          { label: "Total Orders", value: String(totalOrders), icon: ShoppingCart, color: "text-blue-600 bg-blue-50" },
-          { label: "Avg. Order Value", value: formatCurrency(avgOrderValue), icon: BarChart3, color: "text-purple-600 bg-purple-50" },
-          { label: "Top Customer", value: topCustomer ? topCustomer[0] : "—", icon: Users, color: "text-green-600 bg-green-50" },
+          { label: t("reports.totalRevenue"), value: formatCurrency(totalRevenue), icon: TrendingUp, color: "text-indigo-600 bg-indigo-50" },
+          { label: t("reports.totalOrders"), value: String(totalOrders), icon: ShoppingCart, color: "text-blue-600 bg-blue-50" },
+          { label: t("reports.avgOrderValue"), value: formatCurrency(avgOrderValue), icon: BarChart3, color: "text-purple-600 bg-purple-50" },
+          { label: t("reports.topCustomer"), value: topCustomer ? topCustomer[0] : "—", icon: Users, color: "text-green-600 bg-green-50" },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">

@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/layout/page-header"
 import { SearchInput } from "@/components/shared/search-input"
 import { KpiCard } from "@/components/shared/kpi-card"
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n/context"
 
 interface Employee {
   id: string
@@ -96,7 +97,7 @@ const initialLeaves: LeaveRecord[] = [
   { id: "l7", employeeId: "3", employeeName: "Laura Chen", leaveType: "Vacation", startDate: "2025-03-24", endDate: "2025-03-28", days: 5, status: "pending" },
 ]
 
-const mainTabs = ["Employee Directory", "Departments", "Attendance", "Leave Management"] as const
+const mainTabKeys = ["Employee Directory", "Departments", "Attendance", "Leave Management"] as const
 const deptColors: Record<string, string> = {
   Engineering: "bg-blue-100 text-blue-700",
   Sales: "bg-green-100 text-green-700",
@@ -118,9 +119,16 @@ const emptyEmployeeForm = {
 }
 
 export default function HRPage() {
+  const { t } = useI18n()
   const [employees, setEmployees] = useLocalStorage<Employee[]>("erp-employees", initialEmployees)
   const [search, setSearch] = useState("")
-  const [activeTab, setActiveTab] = useState<string>("Employee Directory")
+  const mainTabs = [
+    t("hr.employeeDirectory"),
+    t("hr.departments"),
+    t("hr.attendance"),
+    t("hr.leaveManagement"),
+  ]
+  const [activeTab, setActiveTab] = useState<string>(t("hr.employeeDirectory"))
   const [showDialog, setShowDialog] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [form, setForm] = useState(emptyEmployeeForm)
@@ -237,17 +245,17 @@ export default function HRPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="HR & Employees"
-        subtitle="Manage your team and HR operations"
-        action={{ label: "Add Employee", onClick: openAddDialog }}
+        title={t("hr.title")}
+        subtitle={t("hr.subtitle")}
+        action={{ label: t("hr.addEmployee"), onClick: openAddDialog }}
       />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard title="Total Employees" value={totalEmployees.toString()} icon={Users} subtitle="All team members" />
-        <KpiCard title="Active Employees" value={activeEmployees.toString()} icon={UserCheck} subtitle="Currently working" />
-        <KpiCard title="Departments" value={deptCount.toString()} icon={Building2} subtitle="Active departments" />
-        <KpiCard title="Avg Salary" value={formatCurrency(avgSalary)} icon={DollarSign} subtitle="Per employee" />
+        <KpiCard title={t("hr.totalEmployees")} value={totalEmployees.toString()} icon={Users} subtitle="All team members" />
+        <KpiCard title={t("hr.activeEmployees")} value={activeEmployees.toString()} icon={UserCheck} subtitle="Currently working" />
+        <KpiCard title={t("hr.departments")} value={deptCount.toString()} icon={Building2} subtitle="Active departments" />
+        <KpiCard title={t("hr.avgSalary")} value={formatCurrency(avgSalary)} icon={DollarSign} subtitle="Per employee" />
       </div>
 
       {/* Main Tabs */}
@@ -271,12 +279,12 @@ export default function HRPage() {
         </div>
 
         {/* Employee Directory Tab */}
-        {activeTab === "Employee Directory" && (
+        {activeTab === t("hr.employeeDirectory") && (
           <>
             <div className="p-6 border-b border-gray-100">
               <div className="sm:w-96">
                 <SearchInput
-                  placeholder="Search employees by name, department, or position..."
+                  placeholder={t("common.search")}
                   value={search}
                   onChange={setSearch}
                 />
@@ -350,7 +358,7 @@ export default function HRPage() {
         )}
 
         {/* Departments Tab */}
-        {activeTab === "Departments" && (
+        {activeTab === t("hr.departments") && (
           <div className="p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {departments.map((dept) => (
@@ -375,7 +383,7 @@ export default function HRPage() {
         )}
 
         {/* Attendance Tab */}
-        {activeTab === "Attendance" && (
+        {activeTab === t("hr.attendance") && (
           <>
             <div className="p-6 border-b border-gray-100">
               <div className="flex items-center gap-3">
@@ -432,7 +440,7 @@ export default function HRPage() {
         )}
 
         {/* Leave Management Tab */}
-        {activeTab === "Leave Management" && (
+        {activeTab === t("hr.leaveManagement") && (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { ClipboardList, Clock, DollarSign, PackageCheck, X, Eye, Trash2 } from "lucide-react"
@@ -22,6 +23,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function PurchasesPage() {
+  const { t } = useI18n()
   const [orders, setOrders] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
   const [suppliers] = useSupabaseData<Supplier[]>("erp-suppliers", [])
   const [products] = useSupabaseData<Product[]>("erp-products", [])
@@ -185,18 +187,18 @@ export default function PurchasesPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Purchase Orders"
-        subtitle="Manage purchase orders and supplier deliveries"
-        action={{ label: "New Purchase Order", onClick: () => { resetForm(); setShowNewOrder(true) } }}
+        title={t("purchases.title")}
+        subtitle={t("purchases.subtitle")}
+        action={{ label: t("purchases.newPurchase"), onClick: () => { resetForm(); setShowNewOrder(true) } }}
       />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { title: "Total Orders", value: String(totalOrders), icon: ClipboardList, color: "text-indigo-600 bg-indigo-50" },
-          { title: "Pending", value: String(pendingCount), icon: Clock, color: "text-yellow-600 bg-yellow-50" },
-          { title: "Total Value", value: formatCurrency(totalValue), icon: DollarSign, color: "text-blue-600 bg-blue-50" },
-          { title: "Units Received", value: String(receivedUnits), icon: PackageCheck, color: "text-green-600 bg-green-50" },
+          { title: t("purchases.totalOrders"), value: String(totalOrders), icon: ClipboardList, color: "text-indigo-600 bg-indigo-50" },
+          { title: t("common.pending"), value: String(pendingCount), icon: Clock, color: "text-yellow-600 bg-yellow-50" },
+          { title: t("purchases.totalValue"), value: formatCurrency(totalValue), icon: DollarSign, color: "text-blue-600 bg-blue-50" },
+          { title: t("purchases.received"), value: String(receivedUnits), icon: PackageCheck, color: "text-green-600 bg-green-50" },
         ].map((kpi) => (
           <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -235,7 +237,7 @@ export default function PurchasesPage() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by PO number or supplier..."
+          placeholder={t("common.search")}
           className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
         <ClipboardList className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -246,7 +248,7 @@ export default function PurchasesPage() {
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
             <ClipboardList className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-            <p className="text-gray-500 font-medium">No purchase orders found</p>
+            <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">
               {orders.length === 0
                 ? "Create your first purchase order to get started"
@@ -260,13 +262,13 @@ export default function PurchasesPage() {
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">PO #</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Supplier</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Items</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Paid</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Debt</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Actions</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">{t("purchases.supplier")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">{t("common.quantity")}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">{t("purchases.totalAmount")}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">{t("purchases.amountPaid")}</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">{t("purchases.remainingDebt")}</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">{t("common.status")}</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -289,14 +291,14 @@ export default function PurchasesPage() {
                         <button
                           onClick={() => setSelectedOrder(o)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                          title="View details"
+                          title={t("purchases.editPurchase")}
                         >
                           <Eye className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => setDeleteConfirm(o)}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"
-                          title="Delete order"
+                          title={t("purchases.deletePurchase")}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -370,7 +372,7 @@ export default function PurchasesPage() {
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Purchase Order?</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("purchases.deletePurchase")}</h3>
             <p className="text-sm text-gray-500 mb-1">
               PO <span className="font-mono font-medium">{deleteConfirm.id}</span> from{" "}
               <span className="font-medium">{deleteConfirm.supplier}</span>
@@ -383,13 +385,13 @@ export default function PurchasesPage() {
                 onClick={() => setDeleteConfirm(null)}
                 className="flex-1 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => handleDeleteOrder(deleteConfirm)}
                 className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
               >
-                Delete
+                {t("common.delete")}
               </button>
             </div>
           </div>
@@ -404,7 +406,7 @@ export default function PurchasesPage() {
         >
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-lg font-bold text-gray-900">New Purchase Order</h2>
+              <h2 className="text-lg font-bold text-gray-900">{t("purchases.newPurchase")}</h2>
               <button onClick={() => setShowNewOrder(false)} className="p-1 hover:bg-gray-100 rounded">
                 <X className="h-5 w-5" />
               </button>
@@ -422,7 +424,7 @@ export default function PurchasesPage() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.supplier")}</label>
                 <select
                   value={formSupplierId}
                   onChange={(e) => setFormSupplierId(e.target.value)}
@@ -436,7 +438,7 @@ export default function PurchasesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.product")}</label>
                 <select
                   value={formProductId}
                   onChange={(e) => handleProductChange(e.target.value)}
@@ -451,7 +453,7 @@ export default function PurchasesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.quantity")}</label>
                   <input
                     type="number"
                     min="1"
@@ -461,7 +463,7 @@ export default function PurchasesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.unitCost")}</label>
                   <input
                     type="number"
                     step="0.01"
@@ -481,7 +483,7 @@ export default function PurchasesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount Paid</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.amountPaid")}</label>
                   <input
                     type="number"
                     step="0.01"
@@ -492,7 +494,7 @@ export default function PurchasesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Remaining Debt</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.remainingDebt")}</label>
                   <div className={`w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm bg-gray-50 font-semibold ${formRemainingDebt > 0 ? "text-red-600" : "text-green-600"}`}>
                     {formatCurrency(formRemainingDebt)}
                   </div>
@@ -509,7 +511,7 @@ export default function PurchasesPage() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Expected Delivery Date</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.expectedDate")}</label>
                 <input
                   type="date"
                   value={formExpectedDate}
@@ -523,14 +525,14 @@ export default function PurchasesPage() {
                   onClick={() => setShowNewOrder(false)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   onClick={handleCreateOrder}
                   disabled={!formSupplierId || !formProductId || !formQty || !formUnitPrice || formTotal <= 0}
                   className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Create Order
+                  {t("purchases.newPurchase")}
                 </button>
               </div>
             </div>

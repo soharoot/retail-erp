@@ -1,36 +1,44 @@
 "use client"
 
 import { useState } from "react"
+import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency } from "@/lib/utils"
 import type { InventoryItem, Product } from "@/lib/types"
 import { Warehouse, AlertTriangle, X, TrendingUp, TrendingDown } from "lucide-react"
 
-function stockStatus(stock: number, minStock: number) {
-  if (stock === 0) return { label: "Out of Stock", color: "bg-red-100 text-red-700" }
-  if (stock <= minStock) return { label: "Low Stock", color: "bg-yellow-100 text-yellow-700" }
-  return { label: "In Stock", color: "bg-green-100 text-green-700" }
+function stockStatus(stock: number, minStock: number, labels: { outOfStock: string; lowStock: string; inStock: string }) {
+  if (stock === 0) return { label: labels.outOfStock, color: "bg-red-100 text-red-700" }
+  if (stock <= minStock) return { label: labels.lowStock, color: "bg-yellow-100 text-yellow-700" }
+  return { label: labels.inStock, color: "bg-green-100 text-green-700" }
 }
 
 export default function InventoryPage() {
+  const { t } = useI18n()
   const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
   const [products] = useSupabaseData<Product[]>("erp-products", [])
 
   const [search, setSearch] = useState("")
-  const [filterStatus, setFilterStatus] = useState("All")
+  const [filterStatus, setFilterStatus] = useState(() => "")
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null)
   const [adjustAmount, setAdjustAmount] = useState("")
   const [adjustReason, setAdjustReason] = useState("")
 
   // ── derived ────────────────────────────────────────────────
+  const stockLabels = {
+    outOfStock: t("inventory.outOfStock"),
+    lowStock: t("inventory.lowStockStatus"),
+    inStock: t("inventory.inStock"),
+  }
+
   const filtered = inventory.filter((item) => {
     const matchesSearch =
       (item.productName ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (item.category ?? "").toLowerCase().includes(search.toLowerCase())
     if (!matchesSearch) return false
-    if (filterStatus === "All") return true
-    const { label } = stockStatus(item.stock, item.minStock)
+    if (!filterStatus || filterStatus === t("common.all")) return true
+    const { label } = stockStatus(item.stock, item.minStock, stockLabels)
     return label === filterStatus
   })
 
@@ -65,17 +73,17 @@ export default function InventoryPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
-        title="Inventory Management"
-        subtitle="Track and manage your stock levels"
+        title={t("inventory.title")}
+        subtitle={t("inventory.subtitle")}
       />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Items", value: totalItems, icon: Warehouse, color: "text-indigo-600 bg-indigo-50" },
-          { label: "Total Units", value: totalUnits.toLocaleString(), icon: Warehouse, color: "text-blue-600 bg-blue-50" },
-          { label: "Low Stock Alerts", value: lowStockCount + outOfStockCount, icon: AlertTriangle, color: "text-yellow-600 bg-yellow-50" },
-          { label: "Inventory Value", value: formatCurrency(inventoryValue), icon: Warehouse, color: "text-green-600 bg-green-50" },
+          { label: t("inventory.totalItems"), value: totalItems, icon: Warehouse, color: "text-indigo-600 bg-indigo-50" },
+          { label: t("inventory.totalUnits"), value: totalUnits.toLocaleString(), icon: Warehouse, color: "text-blue-600 bg-blue-50" },
+          { label: t("inventory.lowStockAlerts"), value: lowStockCount + outOfStockCount, icon: AlertTriangle, color: "text-yellow-600 bg-yellow-50" },
+          { label: t("inventory.inventoryValue"), value: formatCurrency(inventoryValue), icon: Warehouse, color: "text-green-600 bg-green-50" },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -96,7 +104,7 @@ export default function InventoryPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search products..."
+              placeholder={t("common.search")}
               className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -106,10 +114,10 @@ export default function InventoryPage() {
             onChange={(e) => setFilterStatus(e.target.value)}
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="All">All Status</option>
-            <option value="In Stock">In Stock</option>
-            <option value="Low Stock">Low Stock</option>
-            <option value="Out of Stock">Out of Stock</option>
+            <option value={t("common.all")}>{t("common.all")}</option>
+            <option value={t("inventory.inStock")}>{t("inventory.inStock")}</option>
+            <option value={t("inventory.lowStockStatus")}>{t("inventory.lowStockStatus")}</option>
+            <option value={t("inventory.outOfStock")}>{t("inventory.outOfStock")}</option>
           </select>
         </div>
       </div>
@@ -119,7 +127,7 @@ export default function InventoryPage() {
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
             <Warehouse className="mx-auto h-12 w-12 text-gray-300 mb-3" />
-            <p className="text-gray-500 font-medium">No inventory items found</p>
+            <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">
               {inventory.length === 0
                 ? "Add products first — inventory entries are created automatically"
@@ -131,24 +139,24 @@ export default function InventoryPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Product</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("inventory.product")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Category</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Stock</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">Min Stock</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("inventory.stock")}</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("inventory.minStock")}</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Last Updated</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Adjust</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("inventory.lastUpdated")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((item) => {
-                  const { label, color } = stockStatus(item.stock, item.minStock)
+                  const { label, color } = stockStatus(item.stock, item.minStock, stockLabels)
                   const pct = item.minStock > 0
                     ? Math.min(100, Math.round((item.stock / (item.minStock * 3)) * 100))
                     : 100
                   const barColor =
-                    label === "Out of Stock" ? "bg-red-500" :
-                    label === "Low Stock" ? "bg-yellow-500" : "bg-green-500"
+                    label === stockLabels.outOfStock ? "bg-red-500" :
+                    label === stockLabels.lowStock ? "bg-yellow-500" : "bg-green-500"
                   return (
                     <tr key={item.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
@@ -177,7 +185,7 @@ export default function InventoryPage() {
                           onClick={() => setAdjustItem(item)}
                           className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
                         >
-                          Adjust
+                          {t("inventory.adjustStock")}
                         </button>
                       </td>
                     </tr>
@@ -194,7 +202,7 @@ export default function InventoryPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">Adjust Stock</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("inventory.adjustStock")}</h2>
               <button
                 onClick={() => { setAdjustItem(null); setAdjustAmount(""); setAdjustReason("") }}
                 className="p-1 rounded-lg hover:bg-gray-100"
@@ -209,7 +217,7 @@ export default function InventoryPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Adjustment Amount
+                  {t("inventory.adjustmentAmount")}
                 </label>
                 <p className="text-xs text-gray-400 mb-2">Use positive (+) to add stock, negative (−) to remove</p>
                 <div className="flex gap-2">
@@ -240,7 +248,7 @@ export default function InventoryPage() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("inventory.adjustmentReason")}</label>
                 <input
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
@@ -254,14 +262,14 @@ export default function InventoryPage() {
                 onClick={() => { setAdjustItem(null); setAdjustAmount(""); setAdjustReason("") }}
                 className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleAdjust}
                 disabled={!adjustAmount || adjustAmount === "0"}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                Apply Adjustment
+                {t("common.save")}
               </button>
             </div>
           </div>
