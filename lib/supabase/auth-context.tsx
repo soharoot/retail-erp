@@ -26,25 +26,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = createClient()
 
   const fetchOrgId = useCallback(async (userId: string): Promise<string | null> => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("org_id, full_name")
-      .eq("id", userId)
-      .maybeSingle()
-    const oid = data?.org_id ?? null
-    setOrgId(oid)
-    return oid
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("org_id, full_name")
+        .eq("id", userId)
+        .maybeSingle()
+      const oid = data?.org_id ?? null
+      setOrgId(oid)
+      // Cache orgId for offline fallback
+      if (oid) {
+        try { window.localStorage.setItem("erp-cached-orgId", oid) } catch { /* ignore */ }
+      }
+      return oid
+    } catch {
+      // Offline — try cached orgId
+      const cached = window.localStorage.getItem("erp-cached-orgId")
+      if (cached) setOrgId(cached)
+      return cached
+    }
   }, [])
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user)
-      if (user) {
-        fetchOrgId(user.id).finally(() => setLoading(false))
+    // Get initial session — with offline fallback
+    supabase.auth.getUser().then(({ data: { user: fetchedUser } }) => {
+      setUser(fetchedUser)
+      if (fetchedUser) {
+        // Cache user for offline fallback
+        try {
+          window.localStorage.setItem("erp-cached-user", JSON.stringify({
+            id: fetchedUser.id,
+            email: fetchedUser.email,
+            user_metadata: fetchedUser.user_metadata,
+          }))
+        } catch { /* ignore */ }
+        fetchOrgId(fetchedUser.id).finally(() => setLoading(false))
       } else {
         setLoading(false)
       }
+    }).catch(() => {
+      // Offline: try to load cached user from localStorage
+      try {
+        const raw = window.localStorage.getItem("erp-cached-user")
+        if (raw) {
+          const cachedUser = JSON.parse(raw) as User
+          setUser(cachedUser)
+          const cachedOid = window.localStorage.getItem("erp-cached-orgId")
+          if (cachedOid) setOrgId(cachedOid)
+        }
+      } catch { /* ignore */ }
+      setLoading(false)
     })
 
     // Listen for auth changes

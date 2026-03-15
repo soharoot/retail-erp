@@ -10,6 +10,7 @@ import {
 } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/supabase/auth-context"
+import { db } from "@/lib/offline/db"
 import type { PermissionCode } from "./permissions"
 
 interface RBACContextValue {
@@ -57,6 +58,8 @@ export function RBACProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    const cacheKey = `${user.id}::rbac`
+
     try {
       // 1. Get org membership + role info
       const { data: membership, error: memErr } = await supabase
@@ -72,7 +75,8 @@ export function RBACProvider({ children }: { children: ReactNode }) {
         .maybeSingle()
 
       if (memErr || !membership) {
-        // User has no org yet (edge case: trigger hasn't run)
+        // Supabase fetch failed or no membership — try cached RBAC
+        await _loadCachedRBAC(cacheKey)
         setLoading(false)
         return
       }
@@ -88,24 +92,62 @@ export function RBACProvider({ children }: { children: ReactNode }) {
       setRoleId(mRoleId)
 
       // 2. Get permissions for this role
+      let codes: string[] = []
       if (mRoleId) {
         const { data: perms } = await supabase
           .from("role_permissions")
           .select("permissions ( code )")
           .eq("role_id", mRoleId)
 
-        const codes = (perms ?? [])
+        codes = (perms ?? [])
           .map((rp) => (rp.permissions as unknown as { code: string } | null)?.code)
           .filter(Boolean) as string[]
 
         setPermissions(codes)
       }
+
+      // 3. Cache RBAC data in IndexedDB for offline use
+      try {
+        await db.cachedRBAC.put({
+          key: cacheKey,
+          userId: user.id,
+          orgId: mOrgId,
+          orgName: mOrgName,
+          roleName: mRoleName,
+          roleId: mRoleId,
+          permissions: codes,
+          cachedAt: Date.now(),
+        })
+      } catch {
+        // IndexedDB cache write failed — non-critical
+      }
     } catch (err) {
-      console.error("[RBAC] Failed to fetch:", err)
+      console.error("[RBAC] Failed to fetch, trying offline cache:", err)
+      // Network error — try to load from IndexedDB cache
+      await _loadCachedRBAC(cacheKey)
     } finally {
       setLoading(false)
     }
   }, [user?.id])
+
+  /** Load RBAC data from IndexedDB cache (offline fallback). */
+  const _loadCachedRBAC = useCallback(
+    async (cacheKey: string) => {
+      try {
+        const cached = await db.cachedRBAC.get(cacheKey)
+        if (cached) {
+          setOrgId(cached.orgId)
+          setOrgName(cached.orgName)
+          setRoleName(cached.roleName)
+          setRoleId(cached.roleId)
+          setPermissions(cached.permissions)
+        }
+      } catch {
+        // IndexedDB not available — user will see no permissions
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     if (!authLoading) {

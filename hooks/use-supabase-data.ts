@@ -3,14 +3,16 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/lib/supabase/auth-context"
+import { db, localDataKey } from "@/lib/offline/db"
+import { onlineStatus } from "@/lib/offline/online-status"
 
 /**
- * Drop-in replacement for useLocalStorage that syncs data to Supabase.
- * Exact same signature: [value, setValue]
+ * Offline-first drop-in replacement for useLocalStorage that syncs to Supabase.
  *
- * Data is stored in `user_data` table keyed by (org_id, data_key).
- * All members of the same organization share the same data.
- * Falls back to (user_id, data_key) for backward compatibility.
+ * Read path:  IndexedDB first (instant) → background pull from Supabase
+ * Write path: IndexedDB (immediate) → Supabase upsert if online, else pendingOps queue
+ *
+ * Falls back to localStorage if user is not authenticated.
  */
 export function useSupabaseData<T>(
   key: string,
@@ -29,56 +31,139 @@ export function useSupabaseData<T>(
     orgIdRef.current = orgId
   }, [user, orgId])
 
-  // Fetch from Supabase when user/org becomes available
+  // ── Read path: IndexedDB first, then background Supabase pull ──
   useEffect(() => {
     if (!user) {
+      // No user — try localStorage fallback
+      try {
+        const raw = window.localStorage.getItem(key)
+        if (raw) setStoredValue(JSON.parse(raw) as T)
+      } catch {
+        // ignore
+      }
       setIsLoaded(true)
       return
     }
 
-    // Prefer org_id query (multi-tenant), fall back to user_id
-    const query = orgId
-      ? supabase
-          .from("user_data")
-          .select("data")
-          .eq("org_id", orgId)
-          .eq("data_key", key)
-          .maybeSingle()
-      : supabase
-          .from("user_data")
-          .select("data")
-          .eq("user_id", user.id)
-          .eq("data_key", key)
-          .maybeSingle()
+    let cancelled = false
 
-    query.then(({ data, error }) => {
-      if (!error && data?.data !== undefined) {
-        setStoredValue(data.data as T)
-      } else if (!error && !data) {
-        // First time — auto-seed with initial value
-        const upsertData: Record<string, unknown> = {
-          user_id: user!.id,
-          data_key: key,
-          data: initialValue,
-        }
-        if (orgId) upsertData.org_id = orgId
-
-        supabase
-          .from("user_data")
-          .upsert(upsertData, {
-            onConflict: orgId ? "org_id,data_key" : "user_id,data_key",
-          })
-          .then(({ error: seedError }) => {
-            if (seedError) {
-              console.warn(`[useSupabaseData] Could not seed "${key}":`, seedError.message)
-            }
-          })
+    async function load() {
+      const oid = orgId
+      if (!oid) {
+        setIsLoaded(true)
+        return
       }
-      setIsLoaded(true)
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
+      const lk = localDataKey(oid, key)
+
+      // 1. Try IndexedDB first (instant)
+      try {
+        const cached = await db.localData.get(lk)
+        if (cached && !cancelled) {
+          setStoredValue(cached.data as T)
+          setIsLoaded(true)
+        }
+      } catch {
+        // IndexedDB not available — continue to Supabase
+      }
+
+      // 2. Background: pull from Supabase if online
+      if (onlineStatus.isOnline) {
+        try {
+          const { data, error } = await supabase
+            .from("user_data")
+            .select("data, updated_at")
+            .eq("org_id", oid)
+            .eq("data_key", key)
+            .maybeSingle()
+
+          if (cancelled) return
+
+          if (!error && data?.data !== undefined) {
+            const serverTime = data.updated_at
+              ? new Date(data.updated_at as string).getTime()
+              : 0
+
+            // Check if we have pending ops for this key (local wins in that case)
+            const hasPending = await db.pendingOps
+              .where("dataKey")
+              .equals(key)
+              .filter((op) => op.orgId === oid)
+              .count()
+              .catch(() => 0)
+
+            if (hasPending === 0) {
+              // No pending local changes — use server data
+              const localRow = await db.localData.get(lk).catch(() => null)
+              if (!localRow || serverTime > localRow.updatedAt) {
+                if (!cancelled) setStoredValue(data.data as T)
+                // Cache in IndexedDB
+                await db.localData
+                  .put({
+                    key: lk,
+                    orgId: oid,
+                    dataKey: key,
+                    data: data.data,
+                    updatedAt: serverTime || Date.now(),
+                    synced: true,
+                  })
+                  .catch(() => {})
+              }
+            }
+
+            if (!cancelled) setIsLoaded(true)
+          } else if (!error && !data) {
+            // First time — auto-seed with initial value
+            const upsertData: Record<string, unknown> = {
+              user_id: user!.id,
+              data_key: key,
+              data: initialValue,
+            }
+            if (oid) upsertData.org_id = oid
+
+            Promise.resolve(
+              supabase
+                .from("user_data")
+                .upsert(upsertData, {
+                  onConflict: oid ? "org_id,data_key" : "user_id,data_key",
+                })
+            ).catch(() => {})
+
+            // Also cache the initial value in IndexedDB
+            await db.localData
+              .put({
+                key: lk,
+                orgId: oid,
+                dataKey: key,
+                data: initialValue,
+                updatedAt: Date.now(),
+                synced: true,
+              })
+              .catch(() => {})
+
+            if (!cancelled) setIsLoaded(true)
+          } else {
+            // Error fetching from Supabase — use whatever we have
+            if (!cancelled) setIsLoaded(true)
+          }
+        } catch {
+          // Network error — use cached data (already loaded from IndexedDB above)
+          if (!cancelled) setIsLoaded(true)
+        }
+      } else {
+        // Offline — IndexedDB data was already loaded above
+        if (!cancelled) setIsLoaded(true)
+      }
+    }
+
+    load()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, user?.id, orgId])
 
+  // ── Write path: IndexedDB + Supabase/pendingOps ──
   const setValue = useCallback(
     (value: T | ((prev: T) => T)) => {
       setStoredValue((prev) => {
@@ -86,27 +171,101 @@ export function useSupabaseData<T>(
         const currentUser = userRef.current
         const currentOrgId = orgIdRef.current
 
-        if (currentUser) {
+        if (currentUser && currentOrgId) {
+          const lk = localDataKey(currentOrgId, key)
+          const now = Date.now()
+
+          // 1. Write to IndexedDB immediately (always)
+          db.localData
+            .put({
+              key: lk,
+              orgId: currentOrgId,
+              dataKey: key,
+              data: newValue,
+              updatedAt: now,
+              synced: false,
+            })
+            .catch(() => {})
+
+          // 2. If online → try Supabase upsert; if offline → queue in pendingOps
+          if (onlineStatus.isOnline) {
+            const upsertData: Record<string, unknown> = {
+              user_id: currentUser.id,
+              org_id: currentOrgId,
+              data_key: key,
+              data: newValue,
+            }
+
+            Promise.resolve(
+              supabase
+                .from("user_data")
+                .upsert(upsertData, { onConflict: "org_id,data_key" })
+            )
+              .then(({ error }) => {
+                if (error) {
+                  // Supabase upsert failed — queue for later
+                  console.warn(
+                    `[useSupabaseData] Save failed for "${key}", queuing:`,
+                    error.message
+                  )
+                  db.pendingOps
+                    .add({
+                      orgId: currentOrgId,
+                      dataKey: key,
+                      data: newValue,
+                      timestamp: now,
+                      retries: 0,
+                    })
+                    .catch(() => {})
+                } else {
+                  // Mark as synced in IndexedDB
+                  db.localData.update(lk, { synced: true }).catch(() => {})
+                }
+              })
+              .catch(() => {
+                // Network error — queue for later
+                db.pendingOps
+                  .add({
+                    orgId: currentOrgId,
+                    dataKey: key,
+                    data: newValue,
+                    timestamp: now,
+                    retries: 0,
+                  })
+                  .catch(() => {})
+              })
+          } else {
+            // Offline — add to pending ops queue
+            db.pendingOps
+              .add({
+                orgId: currentOrgId,
+                dataKey: key,
+                data: newValue,
+                timestamp: now,
+                retries: 0,
+              })
+              .catch(() => {})
+          }
+        } else if (currentUser) {
+          // User exists but no orgId yet — fallback to direct Supabase
           const upsertData: Record<string, unknown> = {
             user_id: currentUser.id,
             data_key: key,
             data: newValue,
           }
-          if (currentOrgId) upsertData.org_id = currentOrgId
-
-          // Fire-and-forget upsert to Supabase
           supabase
             .from("user_data")
-            .upsert(upsertData, {
-              onConflict: currentOrgId ? "org_id,data_key" : "user_id,data_key",
-            })
+            .upsert(upsertData, { onConflict: "user_id,data_key" })
             .then(({ error }) => {
               if (error) {
-                console.error(`[useSupabaseData] Save failed for "${key}":`, error.message)
+                console.error(
+                  `[useSupabaseData] Save failed for "${key}":`,
+                  error.message
+                )
               }
             })
         } else {
-          // Fallback: save to localStorage if user not available
+          // No user — save to localStorage as fallback
           try {
             window.localStorage.setItem(key, JSON.stringify(newValue))
           } catch {
@@ -117,7 +276,7 @@ export function useSupabaseData<T>(
         return newValue
       })
     },
-    [key]
+    [key, supabase]
   )
 
   return [isLoaded ? storedValue : initialValue, setValue]

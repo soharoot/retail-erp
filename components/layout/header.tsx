@@ -3,6 +3,7 @@
 import { Bell, Search, Menu, User, LogOut } from "lucide-react"
 import { useAuth } from "@/lib/supabase/auth-context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { OfflineIndicator } from "@/components/shared/offline-indicator"
 import type { Settings } from "@/lib/types"
 import { defaultSettings } from "@/lib/types"
 
@@ -48,6 +49,8 @@ export function Header({ onMenuClick }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        <OfflineIndicator />
+
         <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
           <Bell className="h-5 w-5 text-gray-500" />
           <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500" />
