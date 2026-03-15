@@ -1,5 +1,8 @@
 "use client"
 
+import { PageGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS } from "@/lib/rbac/permissions"
+
 import { useState } from "react"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { useI18n } from "@/lib/i18n/context"
@@ -32,6 +35,7 @@ export default function SettingsPage() {
   const labelClass = "block text-sm font-medium text-gray-700 mb-1.5"
 
   return (
+    <PageGuard permission={PERMISSIONS.SETTINGS_VIEW}>
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="Settings" subtitle="Configure your ERP system preferences" />
 
@@ -240,5 +244,6 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  </PageGuard>
   )
 }

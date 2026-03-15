@@ -1,261 +1,834 @@
 "use client"
 
-import { useState } from "react"
-import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
+import { useState, useEffect, useCallback } from "react"
+import { createClient } from "@/lib/supabase/client"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
 import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { SearchInput } from "@/components/shared/search-input"
-import { Shield, Users, UserCheck, UserX, Pencil, Trash2, X, Key, Clock } from "lucide-react"
+import { PageGuard, PermissionGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS, MODULE_DEFINITIONS } from "@/lib/rbac/permissions"
+import {
+  Shield, Users, UserCheck, UserX, Pencil, Trash2, X,
+  Key, Clock, Plus, Check, Mail,
+} from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
 
-interface User {
+// ── Types ──
+
+interface OrgMember {
   id: string
-  name: string
-  email: string
-  role: string
-  department: string
+  org_id: string
+  user_id: string | null
+  role_id: string | null
+  invited_email: string | null
   status: string
-  lastLogin: string
-  createdAt: string
+  created_at: string
+  // Joined data
+  profile_name: string | null
+  profile_email: string | null
+  role_name: string | null
 }
 
-const initialUsers: User[] = [
-  { id: "U-001", name: "Admin User", email: "admin@erp.com", role: "admin", department: "Management", status: "active", lastLogin: "2025-03-09", createdAt: "2024-01-15" },
-  { id: "U-002", name: "Sarah Davis", email: "sarah.davis@erp.com", role: "manager", department: "Sales", status: "active", lastLogin: "2025-03-09", createdAt: "2024-02-01" },
-  { id: "U-003", name: "John Miller", email: "john.miller@erp.com", role: "manager", department: "Finance", status: "active", lastLogin: "2025-03-08", createdAt: "2024-02-15" },
-  { id: "U-004", name: "Emily Chen", email: "emily.chen@erp.com", role: "employee", department: "Engineering", status: "active", lastLogin: "2025-03-07", createdAt: "2024-03-01" },
-  { id: "U-005", name: "Mike Johnson", email: "mike.j@erp.com", role: "employee", department: "Marketing", status: "active", lastLogin: "2025-03-06", createdAt: "2024-03-15" },
-  { id: "U-006", name: "Lisa Wang", email: "lisa.wang@erp.com", role: "employee", department: "HR", status: "active", lastLogin: "2025-03-05", createdAt: "2024-04-01" },
-  { id: "U-007", name: "Tom Brown", email: "tom.b@erp.com", role: "viewer", department: "Operations", status: "active", lastLogin: "2025-02-28", createdAt: "2024-05-10" },
-  { id: "U-008", name: "Anna Wilson", email: "anna.w@erp.com", role: "employee", department: "Sales", status: "inactive", lastLogin: "2025-01-15", createdAt: "2024-04-20" },
-  { id: "U-009", name: "David Park", email: "david.p@erp.com", role: "viewer", department: "Finance", status: "inactive", lastLogin: "2024-12-20", createdAt: "2024-06-01" },
-  { id: "U-010", name: "Rachel Green", email: "rachel.g@erp.com", role: "manager", department: "Operations", status: "active", lastLogin: "2025-03-08", createdAt: "2024-07-15" },
-]
-
-const roleColors: Record<string, string> = {
-  admin: "bg-red-100 text-red-700",
-  manager: "bg-blue-100 text-blue-700",
-  employee: "bg-green-100 text-green-700",
-  viewer: "bg-gray-100 text-gray-600",
+interface Role {
+  id: string
+  org_id: string
+  name: string
+  description: string | null
+  is_system: boolean
+  created_at: string
+  permissions: string[] // permission codes
+  member_count: number
 }
 
-const permissions = {
-  admin: { dashboard: true, products: true, inventory: true, sales: true, purchases: true, suppliers: true, customers: true, invoicing: true, financial: true, hr: true, projects: true, crm: true, reports: true, settings: true, users: true },
-  manager: { dashboard: true, products: true, inventory: true, sales: true, purchases: true, suppliers: true, customers: true, invoicing: true, financial: true, hr: false, projects: true, crm: true, reports: true, settings: false, users: false },
-  employee: { dashboard: true, products: true, inventory: true, sales: true, purchases: false, suppliers: false, customers: true, invoicing: false, financial: false, hr: false, projects: true, crm: true, reports: false, settings: false, users: false },
-  viewer: { dashboard: true, products: true, inventory: true, sales: false, purchases: false, suppliers: false, customers: false, invoicing: false, financial: false, hr: false, projects: false, crm: false, reports: true, settings: false, users: false },
-}
+// ── Component ──
 
 export default function UsersPage() {
   const { t } = useI18n()
-  const [users, setUsers] = useLocalStorage<User[]>("erp-users", initialUsers)
-  const [search, setSearch] = useState("")
-  const [showDialog, setShowDialog] = useState(false)
-  const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [activeTab, setActiveTab] = useState<"users" | "roles" | "activity">("users")
-  const [formData, setFormData] = useState({ name: "", email: "", role: "employee", department: "", status: "active" })
+  const { user } = useAuth()
+  const { orgId, isAdmin, hasPermission, refetch: refetchRBAC } = useRBAC()
+  const supabase = createClient()
 
-  const filteredUsers = users.filter(u =>
-    u.name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase()) ||
-    u.department.toLowerCase().includes(search.toLowerCase())
+  // State
+  const [members, setMembers] = useState<OrgMember[]>([])
+  const [roles, setRoles] = useState<Role[]>([])
+  const [allPermissions, setAllPermissions] = useState<{ id: string; code: string }[]>([])
+  const [search, setSearch] = useState("")
+  const [activeTab, setActiveTab] = useState<"members" | "roles" | "activity">("members")
+  const [loading, setLoading] = useState(true)
+
+  // Dialogs
+  const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const [showRoleDialog, setShowRoleDialog] = useState(false)
+  const [editingRole, setEditingRole] = useState<Role | null>(null)
+  const [editingMember, setEditingMember] = useState<OrgMember | null>(null)
+  const [showEditMemberDialog, setShowEditMemberDialog] = useState(false)
+
+  // Forms
+  const [inviteForm, setInviteForm] = useState({ email: "", name: "", role_id: "" })
+  const [roleForm, setRoleForm] = useState({ name: "", description: "", permissions: [] as string[] })
+
+  // ── Fetch data ──
+
+  const fetchMembers = useCallback(async () => {
+    if (!orgId) return
+    const { data } = await supabase
+      .from("org_members")
+      .select("id, org_id, user_id, role_id, invited_email, status, created_at")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: true })
+
+    if (!data) return
+
+    // Fetch profiles and roles for each member
+    const enriched: OrgMember[] = []
+    for (const m of data) {
+      let profileName: string | null = null
+      let profileEmail: string | null = null
+      let roleName: string | null = null
+
+      if (m.user_id) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", m.user_id)
+          .maybeSingle()
+        profileName = profile?.full_name ?? null
+
+        // Get email from auth (we can use the invited_email fallback)
+        profileEmail = m.invited_email
+      }
+
+      if (m.role_id) {
+        const { data: role } = await supabase
+          .from("roles")
+          .select("name")
+          .eq("id", m.role_id)
+          .maybeSingle()
+        roleName = role?.name ?? null
+      }
+
+      enriched.push({
+        ...m,
+        profile_name: profileName ?? m.invited_email?.split("@")[0] ?? "Unknown",
+        profile_email: profileEmail ?? m.invited_email,
+        role_name: roleName,
+      })
+    }
+    setMembers(enriched)
+  }, [orgId])
+
+  const fetchRoles = useCallback(async () => {
+    if (!orgId) return
+    const { data: rolesData } = await supabase
+      .from("roles")
+      .select("id, org_id, name, description, is_system, created_at")
+      .eq("org_id", orgId)
+      .order("created_at", { ascending: true })
+
+    if (!rolesData) return
+
+    // Fetch permissions for each role + member count
+    const enriched: Role[] = []
+    for (const r of rolesData) {
+      const { data: rps } = await supabase
+        .from("role_permissions")
+        .select("permissions ( code )")
+        .eq("role_id", r.id)
+      const codes = (rps ?? []).map((rp) => {
+        const p = rp.permissions as unknown as { code: string } | null
+        return p?.code
+      }).filter(Boolean) as string[]
+
+      const { count } = await supabase
+        .from("org_members")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", orgId)
+        .eq("role_id", r.id)
+
+      enriched.push({ ...r, permissions: codes, member_count: count ?? 0 })
+    }
+    setRoles(enriched)
+  }, [orgId])
+
+  const fetchPermissions = useCallback(async () => {
+    const { data } = await supabase.from("permissions").select("id, code").order("code")
+    setAllPermissions(data ?? [])
+  }, [])
+
+  useEffect(() => {
+    if (orgId) {
+      Promise.all([fetchMembers(), fetchRoles(), fetchPermissions()]).finally(() => setLoading(false))
+    }
+  }, [orgId, fetchMembers, fetchRoles, fetchPermissions])
+
+  // ── Handlers ──
+
+  const handleInvite = async () => {
+    if (!inviteForm.email || !inviteForm.role_id || !orgId) return
+
+    const { error } = await supabase.from("org_members").insert({
+      org_id: orgId,
+      invited_email: inviteForm.email,
+      role_id: inviteForm.role_id,
+      invited_by: user?.id,
+      status: "invited",
+    })
+
+    if (error) {
+      alert(t("rbac.inviteError") + ": " + error.message)
+      return
+    }
+
+    setShowInviteDialog(false)
+    setInviteForm({ email: "", name: "", role_id: "" })
+    fetchMembers()
+  }
+
+  const handleUpdateMemberRole = async () => {
+    if (!editingMember) return
+    const { error } = await supabase
+      .from("org_members")
+      .update({ role_id: editingMember.role_id })
+      .eq("id", editingMember.id)
+
+    if (error) {
+      alert("Error: " + error.message)
+      return
+    }
+    setShowEditMemberDialog(false)
+    setEditingMember(null)
+    fetchMembers()
+    refetchRBAC()
+  }
+
+  const handleToggleMemberStatus = async (member: OrgMember) => {
+    const newStatus = member.status === "active" ? "disabled" : "active"
+    await supabase.from("org_members").update({ status: newStatus }).eq("id", member.id)
+    fetchMembers()
+  }
+
+  const handleRemoveMember = async (member: OrgMember) => {
+    if (member.user_id === user?.id) {
+      alert(t("rbac.cannotRemoveSelf"))
+      return
+    }
+    if (!confirm(t("rbac.confirmRemove"))) return
+    await supabase.from("org_members").delete().eq("id", member.id)
+    fetchMembers()
+  }
+
+  const handleSaveRole = async () => {
+    if (!roleForm.name || !orgId) return
+
+    if (editingRole) {
+      // Update role name/description
+      await supabase
+        .from("roles")
+        .update({ name: roleForm.name, description: roleForm.description })
+        .eq("id", editingRole.id)
+
+      // Sync permissions: delete all, re-insert selected
+      await supabase.from("role_permissions").delete().eq("role_id", editingRole.id)
+      const permIds = allPermissions.filter((p) => roleForm.permissions.includes(p.code)).map((p) => p.id)
+      if (permIds.length > 0) {
+        await supabase.from("role_permissions").insert(
+          permIds.map((pid) => ({ role_id: editingRole.id, permission_id: pid }))
+        )
+      }
+    } else {
+      // Create new role
+      const { data: newRole } = await supabase
+        .from("roles")
+        .insert({ org_id: orgId, name: roleForm.name, description: roleForm.description })
+        .select("id")
+        .single()
+
+      if (newRole) {
+        const permIds = allPermissions.filter((p) => roleForm.permissions.includes(p.code)).map((p) => p.id)
+        if (permIds.length > 0) {
+          await supabase.from("role_permissions").insert(
+            permIds.map((pid) => ({ role_id: newRole.id, permission_id: pid }))
+          )
+        }
+      }
+    }
+
+    setShowRoleDialog(false)
+    setEditingRole(null)
+    setRoleForm({ name: "", description: "", permissions: [] })
+    fetchRoles()
+    refetchRBAC()
+  }
+
+  const handleDeleteRole = async (role: Role) => {
+    if (role.is_system) {
+      alert(t("rbac.cannotDeleteSystem"))
+      return
+    }
+    if (role.member_count > 0) {
+      alert(t("rbac.roleHasMembers"))
+      return
+    }
+    if (!confirm(t("rbac.confirmDeleteRole"))) return
+    await supabase.from("role_permissions").delete().eq("role_id", role.id)
+    await supabase.from("roles").delete().eq("id", role.id)
+    fetchRoles()
+  }
+
+  const openEditRole = (role: Role) => {
+    setEditingRole(role)
+    setRoleForm({ name: role.name, description: role.description ?? "", permissions: role.permissions })
+    setShowRoleDialog(true)
+  }
+
+  const openEditMember = (member: OrgMember) => {
+    setEditingMember(member)
+    setShowEditMemberDialog(true)
+  }
+
+  const togglePermission = (code: string) => {
+    setRoleForm((prev) => ({
+      ...prev,
+      permissions: prev.permissions.includes(code)
+        ? prev.permissions.filter((p) => p !== code)
+        : [...prev.permissions, code],
+    }))
+  }
+
+  // ── Derived ──
+
+  const filteredMembers = members.filter(
+    (m) =>
+      (m.profile_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (m.profile_email ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (m.role_name ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
-  const activeUsers = users.filter(u => u.status === "active").length
-  const admins = users.filter(u => u.role === "admin").length
-  const inactiveUsers = users.filter(u => u.status === "inactive").length
+  const activeMembers = members.filter((m) => m.status === "active").length
+  const invitedMembers = members.filter((m) => m.status === "invited").length
+  const disabledMembers = members.filter((m) => m.status === "disabled").length
 
-  const handleSave = () => {
-    if (!formData.name || !formData.email) return
-    if (editingUser) {
-      setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...formData } : u))
-    } else {
-      const newUser: User = {
-        id: `U-${String(users.length + 1).padStart(3, "0")}`,
-        ...formData,
-        lastLogin: "Never",
-        createdAt: new Date().toISOString().split("T")[0],
-      }
-      setUsers([...users, newUser])
-    }
-    setShowDialog(false)
-    setEditingUser(null)
-    setFormData({ name: "", email: "", role: "employee", department: "", status: "active" })
+  const roleColors: Record<string, string> = {
+    Admin: "bg-red-100 text-red-700",
+    Manager: "bg-blue-100 text-blue-700",
+    Employee: "bg-green-100 text-green-700",
+    Viewer: "bg-gray-100 text-gray-600",
   }
 
-  const handleEdit = (user: User) => {
-    setEditingUser(user)
-    setFormData({ name: user.name, email: user.email, role: user.role, department: user.department, status: user.status })
-    setShowDialog(true)
-  }
-
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this user?")) {
-      setUsers(users.filter(u => u.id !== id))
-    }
+  const statusMap: Record<string, string> = {
+    active: "active",
+    invited: "pending",
+    disabled: "inactive",
   }
 
   const activityLog = [
-    { user: "Admin User", action: "Updated system settings", time: "2 minutes ago" },
-    { user: "Sarah Davis", action: "Created new invoice INV-2025-015", time: "15 minutes ago" },
-    { user: "John Miller", action: "Approved purchase order PO-012", time: "1 hour ago" },
-    { user: "Emily Chen", action: "Added new product SKU-089", time: "2 hours ago" },
-    { user: "Mike Johnson", action: "Closed deal with MegaRetail", time: "3 hours ago" },
-    { user: "Admin User", action: "Added new user Rachel Green", time: "5 hours ago" },
-    { user: "Lisa Wang", action: "Updated employee records", time: "Yesterday" },
-    { user: "Sarah Davis", action: "Generated monthly sales report", time: "Yesterday" },
+    { user: "System", action: "RBAC system initialized", time: "Just now" },
+    { user: "Admin", action: "Organization created", time: "On signup" },
   ]
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6 animate-fade-in">
-      <PageHeader title={t("users.title")} subtitle={t("users.subtitle")} action={{ label: t("users.addUser"), onClick: () => { setEditingUser(null); setFormData({ name: "", email: "", role: "employee", department: "", status: "active" }); setShowDialog(true) } }} />
+    <PageGuard permission={PERMISSIONS.USERS_VIEW}>
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader
+          title={t("users.title")}
+          subtitle={t("users.subtitle")}
+          action={
+            hasPermission(PERMISSIONS.USERS_MANAGE)
+              ? {
+                  label: t("users.inviteMember"),
+                  onClick: () => {
+                    setInviteForm({ email: "", name: "", role_id: roles[0]?.id ?? "" })
+                    setShowInviteDialog(true)
+                  },
+                }
+              : undefined
+          }
+        />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title={t("users.totalUsers")} value={String(users.length)} subtitle="All accounts" icon={Users} />
-        <KpiCard title={t("users.activeUsers")} value={String(activeUsers)} subtitle="Currently active" icon={UserCheck} />
-        <KpiCard title={t("users.roles")} value={String(admins)} subtitle="Full access" icon={Shield} />
-        <KpiCard title={t("common.inactive")} value={String(inactiveUsers)} subtitle="Disabled accounts" icon={UserX} />
-      </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <KpiCard title={t("users.totalUsers")} value={String(members.length)} subtitle={t("users.allAccounts")} icon={Users} />
+          <KpiCard title={t("users.activeUsers")} value={String(activeMembers)} subtitle={t("users.currentlyActive")} icon={UserCheck} />
+          <KpiCard title={t("users.invited")} value={String(invitedMembers)} subtitle={t("users.pendingInvites")} icon={Mail} />
+          <KpiCard title={t("users.roles")} value={String(roles.length)} subtitle={t("users.definedRoles")} icon={Shield} />
+        </div>
 
-      {/* Tabs */}
-      <div className="flex gap-4 border-b border-gray-200">
-        {[
-          { id: "users" as const, label: t("users.title") },
-          { id: "roles" as const, label: t("users.roles") },
-          { id: "activity" as const, label: t("users.activity") },
-        ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id ? "border-indigo-600 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === "users" && (
-        <>
-          <SearchInput placeholder={t("common.search")} value={search} onChange={setSearch} />
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">User</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Role</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Department</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Last Login</th>
-                  <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredUsers.map(user => (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-sm font-bold">
-                          {user.name.split(" ").map(n => n[0]).join("")}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                          <p className="text-xs text-gray-500">{user.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${roleColors[user.role]}`}>
-                        <Key className="h-3 w-3" />{user.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{user.department}</td>
-                    <td className="px-4 py-3"><StatusBadge status={user.status} /></td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{user.lastLogin === "Never" ? "Never" : formatDate(user.lastLogin)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => handleEdit(user)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Pencil className="h-4 w-4" /></button>
-                        {user.role !== "admin" && <button onClick={() => handleDelete(user.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 className="h-4 w-4" /></button>}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-
-      {activeTab === "roles" && (
-        <div className="space-y-6">
-          {(["admin", "manager", "employee", "viewer"] as const).map(role => (
-            <div key={role} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium capitalize ${roleColors[role]}`}>
-                    <Shield className="h-4 w-4" />{role}
-                  </span>
-                  <span className="text-sm text-gray-500">{users.filter(u => u.role === role).length} users</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                {Object.entries(permissions[role]).map(([module, hasAccess]) => (
-                  <div key={module} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${hasAccess ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-400"}`}>
-                    <div className={`w-2 h-2 rounded-full ${hasAccess ? "bg-green-500" : "bg-gray-300"}`} />
-                    <span className="capitalize">{module}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+        {/* Tabs */}
+        <div className="flex gap-4 border-b border-gray-200">
+          {[
+            { id: "members" as const, label: t("users.members") },
+            { id: "roles" as const, label: t("users.roles") },
+            { id: "activity" as const, label: t("users.activity") },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.id
+                  ? "border-indigo-600 text-indigo-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {tab.label}
+            </button>
           ))}
         </div>
-      )}
 
-      {activeTab === "activity" && (
-        <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-200">
-            <h3 className="text-sm font-medium text-gray-900">Recent Activity</h3>
-          </div>
-          <div className="divide-y divide-gray-100">
-            {activityLog.map((activity, i) => (
-              <div key={i} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex-shrink-0">
-                  {activity.user.split(" ").map(n => n[0]).join("")}
+        {/* ═══ Members Tab ═══ */}
+        {activeTab === "members" && (
+          <>
+            <SearchInput placeholder={t("common.search")} value={search} onChange={setSearch} />
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50">
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("users.user")}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("users.role")}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.status")}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("users.joined")}</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.actions")}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredMembers.map((member) => (
+                    <tr key={member.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-sm font-bold">
+                            {(member.profile_name ?? "?")
+                              .split(" ")
+                              .map((n) => n[0])
+                              .join("")
+                              .slice(0, 2)
+                              .toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{member.profile_name}</p>
+                            <p className="text-xs text-gray-500">{member.profile_email ?? member.invited_email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            roleColors[member.role_name ?? ""] ?? "bg-purple-100 text-purple-700"
+                          }`}
+                        >
+                          <Key className="h-3 w-3" />
+                          {member.role_name ?? "No role"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={statusMap[member.status] ?? member.status} />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(member.created_at)}</td>
+                      <td className="px-4 py-3">
+                        <PermissionGuard permission={PERMISSIONS.USERS_MANAGE}>
+                          <div className="flex items-center gap-2">
+                            {member.user_id !== user?.id && (
+                              <>
+                                <button
+                                  onClick={() => openEditMember(member)}
+                                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                                  title={t("rbac.changeRole")}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleToggleMemberStatus(member)}
+                                  className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                                  title={member.status === "active" ? t("rbac.disable") : t("rbac.enable")}
+                                >
+                                  {member.status === "active" ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                                </button>
+                                <button
+                                  onClick={() => handleRemoveMember(member)}
+                                  className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
+                                  title={t("common.delete")}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                            {member.user_id === user?.id && (
+                              <span className="text-xs text-gray-400 italic">{t("rbac.you")}</span>
+                            )}
+                          </div>
+                        </PermissionGuard>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredMembers.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                        {t("common.noResults")}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* ═══ Roles Tab ═══ */}
+        {activeTab === "roles" && (
+          <div className="space-y-6">
+            <PermissionGuard permission={PERMISSIONS.USERS_MANAGE}>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setEditingRole(null)
+                    setRoleForm({ name: "", description: "", permissions: [] })
+                    setShowRoleDialog(true)
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                >
+                  <Plus className="h-4 w-4" />
+                  {t("rbac.createRole")}
+                </button>
+              </div>
+            </PermissionGuard>
+
+            {roles.map((role) => (
+              <div key={role.id} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-medium ${
+                        roleColors[role.name] ?? "bg-purple-100 text-purple-700"
+                      }`}
+                    >
+                      <Shield className="h-4 w-4" />
+                      {role.name}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {role.member_count} {t("users.members").toLowerCase()}
+                    </span>
+                    {role.is_system && (
+                      <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{t("rbac.systemRole")}</span>
+                    )}
+                  </div>
+                  <PermissionGuard permission={PERMISSIONS.USERS_MANAGE}>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditRole(role)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      {!role.is_system && (
+                        <button
+                          onClick={() => handleDeleteRole(role)}
+                          className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </PermissionGuard>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-900"><span className="font-medium">{activity.user}</span> {activity.action}</p>
-                </div>
-                <div className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
-                  <Clock className="h-3 w-3" />
-                  {activity.time}
+                {role.description && <p className="text-sm text-gray-500 mb-4">{role.description}</p>}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                  {MODULE_DEFINITIONS.map((mod) =>
+                    mod.actions.map((action) => {
+                      const code = `${mod.module}.${action}`
+                      const hasIt = role.permissions.includes(code)
+                      return (
+                        <div
+                          key={code}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
+                            hasIt ? "bg-green-50 text-green-700" : "bg-gray-50 text-gray-400"
+                          }`}
+                        >
+                          <div className={`w-2 h-2 rounded-full ${hasIt ? "bg-green-500" : "bg-gray-300"}`} />
+                          <span>
+                            {mod.label} <span className="capitalize">({action})</span>
+                          </span>
+                        </div>
+                      )
+                    })
+                  )}
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Add/Edit User Dialog */}
-      {showDialog && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowDialog(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-lg font-bold text-gray-900">{editingUser ? "Edit User" : "Add New User"}</h2>
-              <button onClick={() => setShowDialog(false)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
+        {/* ═══ Activity Tab ═══ */}
+        {activeTab === "activity" && (
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="text-sm font-medium text-gray-900">{t("users.recentActivity")}</h3>
             </div>
-            <div className="p-6 space-y-4">
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label><input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Role</label><select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="admin">Admin</option><option value="manager">Manager</option><option value="employee">Employee</option><option value="viewer">Viewer</option></select></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Department</label><select value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="">Select...</option><option>Management</option><option>Engineering</option><option>Sales</option><option>Marketing</option><option>Finance</option><option>HR</option><option>Operations</option></select></div>
+            <div className="divide-y divide-gray-100">
+              {activityLog.map((activity, i) => (
+                <div key={i} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex-shrink-0">
+                    {activity.user
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-900">
+                      <span className="font-medium">{activity.user}</span> {activity.action}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
+                    <Clock className="h-3 w-3" />
+                    {activity.time}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ Invite Member Dialog ═══ */}
+        {showInviteDialog && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowInviteDialog(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-6 border-b">
+                <h2 className="text-lg font-bold text-gray-900">{t("users.inviteMember")}</h2>
+                <button onClick={() => setShowInviteDialog(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="h-5 w-5" />
+                </button>
               </div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"><option value="active">Active</option><option value="inactive">Inactive</option></select></div>
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <button onClick={() => setShowDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">Cancel</button>
-                <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">{editingUser ? "Save Changes" : "Add User"}</button>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.email")}</label>
+                  <input
+                    type="email"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                    placeholder="staff@example.com"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("rbac.assignRole")}</label>
+                  <select
+                    value={inviteForm.role_id}
+                    onChange={(e) => setInviteForm({ ...inviteForm, role_id: e.target.value })}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-xs text-gray-500">{t("rbac.inviteHint")}</p>
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    onClick={() => setShowInviteDialog(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    onClick={handleInvite}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                  >
+                    {t("rbac.sendInvite")}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {/* ═══ Edit Member Role Dialog ═══ */}
+        {showEditMemberDialog && editingMember && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowEditMemberDialog(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-6 border-b">
+                <h2 className="text-lg font-bold text-gray-900">{t("rbac.changeRole")}</h2>
+                <button onClick={() => setShowEditMemberDialog(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-gray-600">
+                  {t("rbac.changingRoleFor")} <strong>{editingMember.profile_name}</strong>
+                </p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("rbac.newRole")}</label>
+                  <select
+                    value={editingMember.role_id ?? ""}
+                    onChange={(e) => setEditingMember({ ...editingMember, role_id: e.target.value })}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    {roles.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    onClick={() => setShowEditMemberDialog(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    onClick={handleUpdateMemberRole}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                  >
+                    {t("common.save")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ Create/Edit Role Dialog ═══ */}
+        {showRoleDialog && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowRoleDialog(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white z-10">
+                <h2 className="text-lg font-bold text-gray-900">
+                  {editingRole ? t("rbac.editRole") : t("rbac.createRole")}
+                </h2>
+                <button onClick={() => setShowRoleDialog(false)} className="p-1 hover:bg-gray-100 rounded">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t("rbac.roleName")}</label>
+                    <input
+                      value={roleForm.name}
+                      onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
+                      placeholder="e.g. Cashier"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      disabled={editingRole?.is_system}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t("rbac.roleDescription")}</label>
+                    <input
+                      value={roleForm.description}
+                      onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
+                      placeholder="Short description..."
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Permission Grid */}
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900 mb-3">{t("rbac.permissions")}</h3>
+                  <div className="rounded-lg border border-gray-200 overflow-hidden">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 uppercase">{t("rbac.module")}</th>
+                          <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase">{t("rbac.view")}</th>
+                          <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 uppercase">{t("rbac.manage")}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {MODULE_DEFINITIONS.map((mod) => (
+                          <tr key={mod.module} className="hover:bg-gray-50">
+                            <td className="px-4 py-2 text-sm text-gray-700">{mod.label}</td>
+                            {["view", "manage"].map((action) => {
+                              const code = `${mod.module}.${action}`
+                              const available = (mod.actions as readonly string[]).includes(action)
+                              const checked = roleForm.permissions.includes(code)
+                              return (
+                                <td key={action} className="text-center px-4 py-2">
+                                  {available ? (
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => togglePermission(code)}
+                                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                  ) : (
+                                    <span className="text-gray-300">—</span>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Quick select */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRoleForm({
+                        ...roleForm,
+                        permissions: allPermissions.map((p) => p.code),
+                      })
+                    }
+                    className="px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+                  >
+                    {t("rbac.selectAll")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setRoleForm({
+                        ...roleForm,
+                        permissions: allPermissions.filter((p) => p.code.endsWith(".view")).map((p) => p.code),
+                      })
+                    }
+                    className="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    {t("rbac.viewOnly")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRoleForm({ ...roleForm, permissions: [] })}
+                    className="px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    {t("rbac.clearAll")}
+                  </button>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t">
+                  <button
+                    onClick={() => setShowRoleDialog(false)}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    onClick={handleSaveRole}
+                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                  >
+                    {editingRole ? t("common.save") : t("rbac.createRole")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </PageGuard>
   )
 }

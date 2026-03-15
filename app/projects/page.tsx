@@ -1,5 +1,8 @@
 "use client"
 
+import { PageGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS } from "@/lib/rbac/permissions"
+
 import { useState } from "react"
 import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
 import {
@@ -264,6 +267,7 @@ export default function ProjectsPage() {
   }
 
   return (
+    <PageGuard permission={PERMISSIONS.PROJECTS_VIEW}>
     <div className="space-y-6">
       <PageHeader
         title={t("projects.title")}
@@ -621,5 +625,6 @@ export default function ProjectsPage() {
         </div>
       )}
     </div>
+  </PageGuard>
   )
 }

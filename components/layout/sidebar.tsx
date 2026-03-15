@@ -4,6 +4,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { NAV_PERMISSIONS } from "@/lib/rbac/permissions"
 import {
   LayoutDashboard,
   Package,
@@ -35,6 +37,7 @@ interface SidebarProps {
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
   const pathname = usePathname()
   const { t } = useI18n()
+  const { hasPermission, loading: rbacLoading } = useRBAC()
 
   const navigation = [
     { nameKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -105,7 +108,12 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-3">
           <ul className="space-y-1">
-            {navigation.map((item) => {
+            {navigation.filter((item) => {
+              // While RBAC is loading, show all items to avoid flicker
+              if (rbacLoading) return true
+              const perm = NAV_PERMISSIONS[item.href]
+              return !perm || hasPermission(perm)
+            }).map((item) => {
               const label = t(item.nameKey)
               const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
               return (

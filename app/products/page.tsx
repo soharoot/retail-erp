@@ -1,5 +1,8 @@
 "use client"
 
+import { PageGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS } from "@/lib/rbac/permissions"
+
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
@@ -167,6 +170,7 @@ export default function ProductsPage() {
     s === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
 
   return (
+    <PageGuard permission={PERMISSIONS.PRODUCTS_VIEW}>
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title={t("products.title")}
@@ -487,5 +491,6 @@ export default function ProductsPage() {
         </div>
       )}
     </div>
+  </PageGuard>
   )
 }

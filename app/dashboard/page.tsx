@@ -1,5 +1,8 @@
 "use client"
 
+import { PageGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS } from "@/lib/rbac/permissions"
+
 import Link from "next/link"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { formatCurrency, formatDate } from "@/lib/utils"
@@ -117,6 +120,7 @@ export default function DashboardPage() {
   ]
 
   return (
+    <PageGuard permission={PERMISSIONS.DASHBOARD_VIEW}>
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
@@ -283,5 +287,6 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  </PageGuard>
   )
 }

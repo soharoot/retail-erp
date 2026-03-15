@@ -1,5 +1,8 @@
 "use client"
 
+import { PageGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS } from "@/lib/rbac/permissions"
+
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
@@ -77,6 +80,7 @@ export default function FinancialPage() {
   const unpaidDebts = debts.filter((d) => d.status !== "paid")
 
   return (
+    <PageGuard permission={PERMISSIONS.FINANCIAL_VIEW}>
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title={t("financial.title")}
@@ -335,5 +339,6 @@ export default function FinancialPage() {
         </div>
       )}
     </div>
+  </PageGuard>
   )
 }

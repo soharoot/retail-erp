@@ -1,5 +1,8 @@
 "use client"
 
+import { PageGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS } from "@/lib/rbac/permissions"
+
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
@@ -176,6 +179,7 @@ export default function SupplierDebtsPage() {
   }
 
   return (
+    <PageGuard permission={PERMISSIONS.SUPPLIER_DEBTS_VIEW}>
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title={t("supplierDebts.title")}
@@ -454,5 +458,6 @@ export default function SupplierDebtsPage() {
         </div>
       )}
     </div>
+  </PageGuard>
   )
 }

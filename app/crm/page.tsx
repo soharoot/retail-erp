@@ -1,5 +1,8 @@
 "use client"
 
+import { PageGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS } from "@/lib/rbac/permissions"
+
 import { useState } from "react"
 import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
@@ -82,6 +85,7 @@ export default function CRMPage() {
   }
 
   return (
+    <PageGuard permission={PERMISSIONS.CRM_VIEW}>
     <div className="space-y-6 animate-fade-in">
       <PageHeader title={t("crm.title")} subtitle={t("crm.subtitle")} action={{ label: t("crm.addLead"), onClick: () => setShowDialog(true) }} />
 
@@ -235,5 +239,6 @@ export default function CRMPage() {
         </div>
       )}
     </div>
+  </PageGuard>
   )
 }

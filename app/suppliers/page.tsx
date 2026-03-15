@@ -1,5 +1,8 @@
 "use client"
 
+import { PageGuard } from "@/components/shared/permission-guard"
+import { PERMISSIONS } from "@/lib/rbac/permissions"
+
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
@@ -106,6 +109,7 @@ export default function SuppliersPage() {
   }
 
   return (
+    <PageGuard permission={PERMISSIONS.SUPPLIERS_VIEW}>
     <div className="space-y-6 animate-fade-in">
       <PageHeader title={t("suppliers.title")} subtitle={t("suppliers.subtitle")} action={{ label: t("suppliers.addSupplier"), onClick: () => { setEditing(null); setForm({ name: "", contactPerson: "", email: "", phone: "", address: "", status: "active" }); setShowDialog(true) } }} />
 
@@ -247,5 +251,6 @@ export default function SuppliersPage() {
         </div>
       )}
     </div>
+  </PageGuard>
   )
 }
