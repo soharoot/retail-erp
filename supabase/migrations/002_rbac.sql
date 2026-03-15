@@ -173,6 +173,8 @@ CREATE OR REPLACE FUNCTION public.setup_org_roles(p_org_id UUID)
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
+SET row_security = off
 AS $$
 DECLARE
   v_admin_role_id   UUID;
@@ -246,6 +248,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
+SET row_security = off
 AS $$
 DECLARE
   v_full_name  TEXT;
@@ -499,3 +502,28 @@ $$;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_data_org_key
   ON public.user_data (org_id, data_key)
   WHERE org_id IS NOT NULL;
+
+-- ─────────────────────────────────────────────────────────────
+-- 15. Missing INSERT policies (required for signup trigger)
+-- ─────────────────────────────────────────────────────────────
+
+-- profiles: allow users to create their own profile row
+DROP POLICY IF EXISTS "profiles: insert own" ON public.profiles;
+CREATE POLICY "profiles: insert own"
+  ON public.profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
+-- organizations: allow users to create their own org
+DROP POLICY IF EXISTS "orgs: owner can insert" ON public.organizations;
+CREATE POLICY "orgs: owner can insert"
+  ON public.organizations FOR INSERT
+  WITH CHECK (owner_id = auth.uid());
+
+-- org_members: allow inserting own membership (during signup or invite acceptance)
+DROP POLICY IF EXISTS "members: users.manage can insert" ON public.org_members;
+CREATE POLICY "members: can insert"
+  ON public.org_members FOR INSERT
+  WITH CHECK (
+    public.user_has_permission('users.manage')
+    OR user_id = auth.uid()
+  );
