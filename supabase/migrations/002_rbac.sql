@@ -174,7 +174,6 @@ RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-SET row_security = off
 AS $$
 DECLARE
   v_admin_role_id   UUID;
@@ -195,46 +194,54 @@ BEGIN
   SELECT id INTO v_employee_role_id FROM public.roles WHERE org_id = p_org_id AND name = 'Employee';
   SELECT id INTO v_viewer_role_id   FROM public.roles WHERE org_id = p_org_id AND name = 'Viewer';
 
-  -- Admin: ALL permissions
-  INSERT INTO public.role_permissions (role_id, permission_id)
-  SELECT v_admin_role_id, id FROM public.permissions
-  ON CONFLICT DO NOTHING;
+  -- Admin: ALL permissions (NULL guard prevents crash if role insert was blocked)
+  IF v_admin_role_id IS NOT NULL THEN
+    INSERT INTO public.role_permissions (role_id, permission_id)
+    SELECT v_admin_role_id, id FROM public.permissions
+    ON CONFLICT DO NOTHING;
+  END IF;
 
   -- Manager: all view + most manage (not users.manage, settings.manage)
-  INSERT INTO public.role_permissions (role_id, permission_id)
-  SELECT v_manager_role_id, id FROM public.permissions
-  WHERE code NOT IN ('users.manage', 'settings.manage')
-  ON CONFLICT DO NOTHING;
+  IF v_manager_role_id IS NOT NULL THEN
+    INSERT INTO public.role_permissions (role_id, permission_id)
+    SELECT v_manager_role_id, id FROM public.permissions
+    WHERE code NOT IN ('users.manage', 'settings.manage')
+    ON CONFLICT DO NOTHING;
+  END IF;
 
   -- Employee: view for basic modules + manage for sales, products, inventory, customers
-  INSERT INTO public.role_permissions (role_id, permission_id)
-  SELECT v_employee_role_id, id FROM public.permissions
-  WHERE code IN (
-    'dashboard.view',
-    'products.view', 'products.manage',
-    'inventory.view', 'inventory.manage',
-    'sales.view', 'sales.manage',
-    'customers.view', 'customers.manage',
-    'purchases.view',
-    'suppliers.view',
-    'invoicing.view',
-    'projects.view',
-    'crm.view'
-  )
-  ON CONFLICT DO NOTHING;
+  IF v_employee_role_id IS NOT NULL THEN
+    INSERT INTO public.role_permissions (role_id, permission_id)
+    SELECT v_employee_role_id, id FROM public.permissions
+    WHERE code IN (
+      'dashboard.view',
+      'products.view', 'products.manage',
+      'inventory.view', 'inventory.manage',
+      'sales.view', 'sales.manage',
+      'customers.view', 'customers.manage',
+      'purchases.view',
+      'suppliers.view',
+      'invoicing.view',
+      'projects.view',
+      'crm.view'
+    )
+    ON CONFLICT DO NOTHING;
+  END IF;
 
   -- Viewer: view-only for basic modules
-  INSERT INTO public.role_permissions (role_id, permission_id)
-  SELECT v_viewer_role_id, id FROM public.permissions
-  WHERE code IN (
-    'dashboard.view',
-    'products.view',
-    'inventory.view',
-    'sales.view',
-    'customers.view',
-    'reports.view'
-  )
-  ON CONFLICT DO NOTHING;
+  IF v_viewer_role_id IS NOT NULL THEN
+    INSERT INTO public.role_permissions (role_id, permission_id)
+    SELECT v_viewer_role_id, id FROM public.permissions
+    WHERE code IN (
+      'dashboard.view',
+      'products.view',
+      'inventory.view',
+      'sales.view',
+      'customers.view',
+      'reports.view'
+    )
+    ON CONFLICT DO NOTHING;
+  END IF;
 END;
 $$;
 
@@ -248,7 +255,6 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-SET row_security = off
 AS $$
 DECLARE
   v_full_name  TEXT;
@@ -507,23 +513,45 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_data_org_key
 -- 15. Missing INSERT policies (required for signup trigger)
 -- ─────────────────────────────────────────────────────────────
 
--- profiles: allow users to create their own profile row
-DROP POLICY IF EXISTS "profiles: insert own" ON public.profiles;
-CREATE POLICY "profiles: insert own"
+-- auth.role() IS NULL  = no JWT = trigger/system context → allow
+-- auth.role() = 'anon' = anonymous API user            → block
+-- auth.role() = 'authenticated' = logged-in user       → check permission
+
+-- profiles: allow own insert or trigger context
+DROP POLICY IF EXISTS "profiles: insert own"  ON public.profiles;
+DROP POLICY IF EXISTS "profiles: can insert"  ON public.profiles;
+CREATE POLICY "profiles: can insert"
   ON public.profiles FOR INSERT
-  WITH CHECK (auth.uid() = id);
+  WITH CHECK (auth.uid() = id OR auth.role() IS NULL);
 
--- organizations: allow users to create their own org
+-- organizations: allow owner insert or trigger context
 DROP POLICY IF EXISTS "orgs: owner can insert" ON public.organizations;
-CREATE POLICY "orgs: owner can insert"
+DROP POLICY IF EXISTS "orgs: can insert"       ON public.organizations;
+CREATE POLICY "orgs: can insert"
   ON public.organizations FOR INSERT
-  WITH CHECK (owner_id = auth.uid());
+  WITH CHECK (owner_id = auth.uid() OR auth.role() IS NULL);
 
--- org_members: allow inserting own membership (during signup or invite acceptance)
+-- roles: allow users.manage or trigger context
+DROP POLICY IF EXISTS "roles: users.manage can insert" ON public.roles;
+DROP POLICY IF EXISTS "roles: can insert"              ON public.roles;
+CREATE POLICY "roles: can insert"
+  ON public.roles FOR INSERT
+  WITH CHECK (public.user_has_permission('users.manage') OR auth.role() IS NULL);
+
+-- role_permissions: allow users.manage or trigger context
+DROP POLICY IF EXISTS "role_perms: users.manage can insert" ON public.role_permissions;
+DROP POLICY IF EXISTS "role_perms: can insert"              ON public.role_permissions;
+CREATE POLICY "role_perms: can insert"
+  ON public.role_permissions FOR INSERT
+  WITH CHECK (public.user_has_permission('users.manage') OR auth.role() IS NULL);
+
+-- org_members: allow own membership, users.manage, or trigger context
 DROP POLICY IF EXISTS "members: users.manage can insert" ON public.org_members;
+DROP POLICY IF EXISTS "members: can insert"              ON public.org_members;
 CREATE POLICY "members: can insert"
   ON public.org_members FOR INSERT
   WITH CHECK (
     public.user_has_permission('users.manage')
     OR user_id = auth.uid()
+    OR auth.role() IS NULL
   );
