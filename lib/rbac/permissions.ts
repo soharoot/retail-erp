@@ -49,6 +49,8 @@ export const PERMISSIONS = {
 
   USERS_VIEW: "users.view",
   USERS_MANAGE: "users.manage",
+
+  ACTIVITY_VIEW: "activity.view",
 } as const
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -73,6 +75,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionCode> = {
   "/reports": PERMISSIONS.REPORTS_VIEW,
   "/settings": PERMISSIONS.SETTINGS_VIEW,
   "/users": PERMISSIONS.USERS_VIEW,
+  "/activity": PERMISSIONS.ACTIVITY_VIEW,
 }
 
 /**
@@ -101,4 +104,5 @@ export const MODULE_DEFINITIONS = [
   { module: "reports",        label: "Reports",         actions: ["view"] },
   { module: "settings",       label: "Settings",        actions: ["view", "manage"] },
   { module: "users",          label: "User Management", actions: ["view", "manage"] },
+  { module: "activity",       label: "Activity Log",    actions: ["view"] },
 ] as const

@@ -19,6 +19,7 @@ export const translations = {
       reports: "Reports",
       settings: "Settings",
       userManagement: "User Management",
+      activityLog: "Activity Log",
     },
     common: {
       save: "Save",
@@ -343,6 +344,18 @@ export const translations = {
       enable: "Enable",
       you: "You",
     },
+    activity: {
+      title: "Activity Log",
+      subtitle: "Full audit trail of all actions in your organization",
+      allModules: "All Modules",
+      user: "User",
+      action: "Action",
+      module: "Module",
+      description: "Description",
+      timestamp: "Timestamp",
+      noLogs: "No activity recorded yet",
+      noLogsDesc: "Actions across all modules will appear here",
+    },
   },
 
   fr: {
@@ -363,6 +376,7 @@ export const translations = {
       reports: "Rapports",
       settings: "Paramètres",
       userManagement: "Gestion Utilisateurs",
+      activityLog: "Journal d'activité",
     },
     common: {
       save: "Enregistrer",
@@ -687,6 +701,18 @@ export const translations = {
       enable: "Activer",
       you: "Vous",
     },
+    activity: {
+      title: "Journal d'activité",
+      subtitle: "Historique complet de toutes les actions dans votre organisation",
+      allModules: "Tous les modules",
+      user: "Utilisateur",
+      action: "Action",
+      module: "Module",
+      description: "Description",
+      timestamp: "Horodatage",
+      noLogs: "Aucune activité enregistrée",
+      noLogsDesc: "Les actions de tous les modules apparaîtront ici",
+    },
   },
 
   ar: {
@@ -707,6 +733,7 @@ export const translations = {
       reports: "التقارير",
       settings: "الإعدادات",
       userManagement: "إدارة المستخدمين",
+      activityLog: "سجل النشاط",
     },
     common: {
       save: "حفظ",
@@ -1030,6 +1057,18 @@ export const translations = {
       disable: "تعطيل",
       enable: "تفعيل",
       you: "أنت",
+    },
+    activity: {
+      title: "سجل النشاط",
+      subtitle: "سجل تدقيق كامل لجميع الإجراءات في مؤسستك",
+      allModules: "جميع الوحدات",
+      user: "المستخدم",
+      action: "الإجراء",
+      module: "الوحدة",
+      description: "الوصف",
+      timestamp: "الوقت",
+      noLogs: "لا يوجد نشاط مسجل بعد",
+      noLogsDesc: "ستظهر هنا الإجراءات من جميع الوحدات",
     },
   },
 } as const

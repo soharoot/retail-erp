@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
+import { logAction } from "@/lib/activity/log-action"
 
 // ── Types ──
 
@@ -183,6 +184,19 @@ export default function UsersPage() {
       return
     }
 
+    const roleName = roles.find((r) => r.id === inviteForm.role_id)?.name ?? inviteForm.role_id
+    if (user?.id && orgId) {
+      logAction({
+        action: "user.invited",
+        module: "users",
+        description: `Invited ${inviteForm.email} with role "${roleName}"`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { invited_email: inviteForm.email, role: roleName },
+      })
+    }
+
     setShowInviteDialog(false)
     setInviteForm({ email: "", name: "", role_id: "" })
     fetchMembers()
@@ -199,6 +213,20 @@ export default function UsersPage() {
       alert("Error: " + error.message)
       return
     }
+
+    const newRoleName = roles.find((r) => r.id === editingMember.role_id)?.name ?? editingMember.role_id
+    if (user?.id && orgId) {
+      logAction({
+        action: "user.role_changed",
+        module: "users",
+        description: `Changed role of "${editingMember.profile_name ?? editingMember.invited_email}" to "${newRoleName}"`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { member_id: editingMember.id, new_role: newRoleName },
+      })
+    }
+
     setShowEditMemberDialog(false)
     setEditingMember(null)
     fetchMembers()
@@ -208,6 +236,17 @@ export default function UsersPage() {
   const handleToggleMemberStatus = async (member: OrgMember) => {
     const newStatus = member.status === "active" ? "disabled" : "active"
     await supabase.from("org_members").update({ status: newStatus }).eq("id", member.id)
+    if (user?.id && orgId) {
+      logAction({
+        action: `user.${newStatus === "active" ? "enabled" : "disabled"}`,
+        module: "users",
+        description: `${newStatus === "active" ? "Enabled" : "Disabled"} member "${member.profile_name ?? member.invited_email}"`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { member_id: member.id, new_status: newStatus },
+      })
+    }
     fetchMembers()
   }
 
@@ -239,6 +278,17 @@ export default function UsersPage() {
           permIds.map((pid) => ({ role_id: editingRole.id, permission_id: pid }))
         )
       }
+      if (user?.id) {
+        logAction({
+          action: "role.updated",
+          module: "users",
+          description: `Updated role "${roleForm.name}" (${roleForm.permissions.length} permissions)`,
+          userId: user.id,
+          orgId,
+          userName: user.email ?? undefined,
+          metadata: { role_id: editingRole.id, role_name: roleForm.name, permission_count: roleForm.permissions.length },
+        })
+      }
     } else {
       // Create new role
       const { data: newRole } = await supabase
@@ -253,6 +303,17 @@ export default function UsersPage() {
           await supabase.from("role_permissions").insert(
             permIds.map((pid) => ({ role_id: newRole.id, permission_id: pid }))
           )
+        }
+        if (user?.id) {
+          logAction({
+            action: "role.created",
+            module: "users",
+            description: `Created role "${roleForm.name}" with ${permIds.length} permissions`,
+            userId: user.id,
+            orgId,
+            userName: user.email ?? undefined,
+            metadata: { role_id: newRole.id, role_name: roleForm.name, permission_count: permIds.length },
+          })
         }
       }
     }
@@ -325,10 +386,26 @@ export default function UsersPage() {
     disabled: "inactive",
   }
 
-  const activityLog = [
-    { user: "System", action: "RBAC system initialized", time: "Just now" },
-    { user: "Admin", action: "Organization created", time: "On signup" },
-  ]
+  // Activity tab — fetch last 50 user-module logs from real table
+  const [activityLogs, setActivityLogs] = useState<{
+    id: string; user_name: string | null; action: string; description: string; created_at: string
+  }[]>([])
+
+  const fetchActivityLogs = useCallback(async () => {
+    if (!orgId) return
+    const { data } = await supabase
+      .from("activity_logs")
+      .select("id, user_name, action, description, created_at")
+      .eq("org_id", orgId)
+      .eq("module", "users")
+      .order("created_at", { ascending: false })
+      .limit(50)
+    setActivityLogs(data ?? [])
+  }, [orgId])
+
+  useEffect(() => {
+    if (activeTab === "activity") fetchActivityLogs()
+  }, [activeTab, fetchActivityLogs])
 
   if (loading) {
     return (
@@ -572,27 +649,39 @@ export default function UsersPage() {
             <div className="p-4 border-b border-gray-200">
               <h3 className="text-sm font-medium text-gray-900">{t("users.recentActivity")}</h3>
             </div>
-            <div className="divide-y divide-gray-100">
-              {activityLog.map((activity, i) => (
-                <div key={i} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex-shrink-0">
-                    {activity.user
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
+            {activityLogs.length === 0 ? (
+              <div className="py-10 text-center text-sm text-gray-400">
+                No user-management activity recorded yet.
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {activityLogs.map((log) => (
+                  <div key={log.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex-shrink-0">
+                      {(log.user_name ?? "?")
+                        .split(/[\s@]+/)
+                        .map((n: string) => n[0])
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-900">{log.description}</p>
+                      {log.user_name && (
+                        <p className="text-xs text-gray-400">by {log.user_name}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
+                      <Clock className="h-3 w-3" />
+                      {new Date(log.created_at).toLocaleString(undefined, {
+                        month: "short", day: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-900">
-                      <span className="font-medium">{activity.user}</span> {activity.action}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-400 flex-shrink-0">
-                    <Clock className="h-3 w-3" />
-                    {activity.time}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from "react"
 import { createClient } from "./client"
+import { logAction } from "@/lib/activity/log-action"
 import type { User } from "@supabase/supabase-js"
 
 interface AuthContextType {
@@ -24,13 +25,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
 
-  const fetchOrgId = useCallback(async (userId: string) => {
+  const fetchOrgId = useCallback(async (userId: string): Promise<string | null> => {
     const { data } = await supabase
       .from("profiles")
-      .select("org_id")
+      .select("org_id, full_name")
       .eq("id", userId)
       .maybeSingle()
-    setOrgId(data?.org_id ?? null)
+    const oid = data?.org_id ?? null
+    setOrgId(oid)
+    return oid
   }, [])
 
   useEffect(() => {
@@ -47,11 +50,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const newUser = session?.user ?? null
       setUser(newUser)
       if (newUser) {
-        fetchOrgId(newUser.id).finally(() => setLoading(false))
+        fetchOrgId(newUser.id).then((oid) => {
+          // Log login only on actual sign-in, not on session refresh
+          if (event === "SIGNED_IN" && oid) {
+            logAction({
+              action: "auth.login",
+              module: "auth",
+              description: `User signed in`,
+              userId: newUser.id,
+              orgId: oid,
+              userName: newUser.email ?? undefined,
+            })
+          }
+        }).finally(() => setLoading(false))
       } else {
         setOrgId(null)
         setLoading(false)

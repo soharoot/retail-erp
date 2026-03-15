@@ -23,6 +23,7 @@ import {
   BarChart3,
   Settings,
   Shield,
+  Activity,
   X,
   ChevronLeft,
 } from "lucide-react"
@@ -56,6 +57,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
     { nameKey: "nav.reports", href: "/reports", icon: BarChart3 },
     { nameKey: "nav.settings", href: "/settings", icon: Settings },
     { nameKey: "nav.userManagement", href: "/users", icon: Shield },
+    { nameKey: "nav.activityLog", href: "/activity", icon: Activity },
   ]
 
   return (

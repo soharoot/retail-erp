@@ -5,6 +5,9 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency } from "@/lib/utils"
@@ -19,6 +22,8 @@ function stockStatus(stock: number, minStock: number, labels: { outOfStock: stri
 
 export default function InventoryPage() {
   const { t } = useI18n()
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
   const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
   const [products] = useSupabaseData<Product[]>("erp-products", [])
 
@@ -61,13 +66,25 @@ export default function InventoryPage() {
     if (!adjustItem) return
     const delta = parseInt(adjustAmount) || 0
     const today = new Date().toISOString().slice(0, 10)
+    const newStock = Math.max(0, adjustItem.stock + delta)
     setInventory(
       inventory.map((i) =>
         i.id === adjustItem.id
-          ? { ...i, stock: Math.max(0, i.stock + delta), lastUpdated: today }
+          ? { ...i, stock: newStock, lastUpdated: today }
           : i
       )
     )
+    if (user?.id && orgId) {
+      logAction({
+        action: "inventory.adjusted",
+        module: "inventory",
+        description: `Adjusted stock of "${adjustItem.productName}": ${adjustItem.stock} → ${newStock} (${delta > 0 ? "+" : ""}${delta})${adjustReason ? ` — ${adjustReason}` : ""}`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { product: adjustItem.productName, old_stock: adjustItem.stock, new_stock: newStock, delta, reason: adjustReason },
+      })
+    }
     setAdjustItem(null)
     setAdjustAmount("")
     setAdjustReason("")

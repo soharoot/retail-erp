@@ -6,6 +6,9 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 import { useState } from "react"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { useI18n } from "@/lib/i18n/context"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
 import { PageHeader } from "@/components/layout/page-header"
 import { Building2, Globe, CreditCard, Bell, Palette, Database, Save } from "lucide-react"
 import type { Settings } from "@/lib/types"
@@ -16,10 +19,23 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false)
   const [settings, setSettings] = useSupabaseData<Settings>("erp-settings", defaultSettings)
   const { setLanguage } = useI18n()
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
 
   const handleSave = () => {
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+    if (user?.id && orgId) {
+      logAction({
+        action: "settings.saved",
+        module: "settings",
+        description: `Settings updated (tab: ${activeTab})`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { tab: activeTab },
+      })
+    }
   }
 
   const tabs = [

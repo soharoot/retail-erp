@@ -5,6 +5,9 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency, formatDate, generateId } from "@/lib/utils"
@@ -34,6 +37,8 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function SalesPage() {
   const { t } = useI18n()
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
   const [sales, setSales] = useSupabaseData<Sale[]>("erp-sales", [])
   const [products] = useSupabaseData<Product[]>("erp-products", [])
   const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
@@ -171,6 +176,17 @@ export default function SalesPage() {
         status: formStatus,
       }
       setSales(sales.map((s) => (s.id === editingSale.id ? updated : s)))
+      if (user?.id && orgId) {
+        logAction({
+          action: "sale.updated",
+          module: "sales",
+          description: `Updated sale ${editingSale.id} for customer "${formCustomer.trim()}" — total ${grandTotal.toFixed(2)}`,
+          userId: user.id,
+          orgId,
+          userName: user.email ?? undefined,
+          metadata: { sale_id: editingSale.id, total: grandTotal, payment: formPayment, status: formStatus },
+        })
+      }
     } else {
       // ── CREATE: check stock then deduct ────────────────────
       for (const item of computedItems) {
@@ -200,6 +216,18 @@ export default function SalesPage() {
           return { ...i, stock: Math.max(0, i.stock - item.qty), lastUpdated: today }
         })
       )
+
+      if (user?.id && orgId) {
+        logAction({
+          action: "sale.created",
+          module: "sales",
+          description: `Created sale ${newSale.id} for customer "${formCustomer.trim()}" — ${computedItems.length} item(s), total ${grandTotal.toFixed(2)}`,
+          userId: user.id,
+          orgId,
+          userName: user.email ?? undefined,
+          metadata: { sale_id: newSale.id, total: grandTotal, payment: formPayment, status: formStatus, item_count: computedItems.length },
+        })
+      }
     }
 
     setShowModal(false)
@@ -218,6 +246,17 @@ export default function SalesPage() {
           return { ...i, stock: i.stock + item.qty, lastUpdated: today }
         })
       )
+      if (user?.id && orgId) {
+        logAction({
+          action: "sale.deleted",
+          module: "sales",
+          description: `Deleted sale ${saleId} (customer: "${sale.customer}", total: ${sale.total.toFixed(2)})`,
+          userId: user.id,
+          orgId,
+          userName: user.email ?? undefined,
+          metadata: { sale_id: saleId, customer: sale.customer, total: sale.total },
+        })
+      }
     }
     setSales(sales.filter((s) => s.id !== saleId))
     setDeleteConfirm(null)
