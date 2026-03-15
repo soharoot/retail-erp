@@ -166,6 +166,23 @@ AS $$
 $$;
 
 -- ─────────────────────────────────────────────────────────────
+-- 9b. Helper: get all role IDs in current user's org
+--     SECURITY DEFINER bypasses RLS chain in role_permissions policy
+-- ─────────────────────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION public.user_org_role_ids()
+RETURNS SETOF UUID
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public
+AS $$
+  SELECT r.id FROM public.roles r
+  JOIN public.org_members om ON om.org_id = r.org_id
+  WHERE om.user_id = auth.uid() AND om.status = 'active';
+$$;
+
+-- ─────────────────────────────────────────────────────────────
 -- 10. Helper: setup default roles + permissions for an org
 -- ─────────────────────────────────────────────────────────────
 
@@ -339,9 +356,10 @@ CREATE TRIGGER on_auth_user_created
 -- ─────────────────────────────────────────────────────────────
 
 -- ── organizations ──
+-- Use user_org_id() (SECURITY DEFINER) to avoid RLS chain issues
 CREATE POLICY "orgs: members can view own org"
   ON public.organizations FOR SELECT
-  USING (id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (id = public.user_org_id());
 
 CREATE POLICY "orgs: owner can update"
   ON public.organizations FOR UPDATE
@@ -349,9 +367,10 @@ CREATE POLICY "orgs: owner can update"
   WITH CHECK (owner_id = auth.uid());
 
 -- ── roles ──
+-- Use user_org_id() (SECURITY DEFINER) to avoid RLS chain issues
 CREATE POLICY "roles: org members can view"
   ON public.roles FOR SELECT
-  USING (org_id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (org_id = public.user_org_id());
 
 CREATE POLICY "roles: users.manage can insert"
   ON public.roles FOR INSERT
@@ -367,13 +386,10 @@ CREATE POLICY "roles: users.manage can delete"
   USING (public.user_has_permission('users.manage') AND is_system = false);
 
 -- ── role_permissions ──
+-- Use user_org_role_ids() (SECURITY DEFINER) to avoid RLS chain issues
 CREATE POLICY "role_perms: org members can view"
   ON public.role_permissions FOR SELECT
-  USING (role_id IN (
-    SELECT r.id FROM public.roles r
-    JOIN public.org_members om ON om.org_id = r.org_id
-    WHERE om.user_id = auth.uid()
-  ));
+  USING (role_id = ANY(ARRAY(SELECT public.user_org_role_ids())));
 
 CREATE POLICY "role_perms: users.manage can insert"
   ON public.role_permissions FOR INSERT
@@ -384,9 +400,13 @@ CREATE POLICY "role_perms: users.manage can delete"
   USING (public.user_has_permission('users.manage'));
 
 -- ── org_members ──
+-- Use user_id = auth.uid() (own row) OR user_org_id() (SECURITY DEFINER) for org view
 CREATE POLICY "members: org members can view"
   ON public.org_members FOR SELECT
-  USING (org_id IN (SELECT org_id FROM public.org_members WHERE user_id = auth.uid()));
+  USING (
+    user_id = auth.uid()
+    OR org_id = public.user_org_id()
+  );
 
 CREATE POLICY "members: users.manage can insert"
   ON public.org_members FOR INSERT
