@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data } = await supabase
         .from("profiles")
-        .select("org_id, full_name")
+        .select("org_id")
         .eq("id", userId)
         .maybeSingle()
       const oid = data?.org_id ?? null
@@ -109,6 +109,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut()
+    // Clear offline cache so no stale data remains for the next user
+    try {
+      window.localStorage.removeItem("erp-cached-user")
+      window.localStorage.removeItem("erp-cached-orgId")
+    } catch { /* ignore */ }
     setUser(null)
     setOrgId(null)
     window.location.href = "/login"

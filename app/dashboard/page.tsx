@@ -5,7 +5,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import Link from "next/link"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, lastNMonths } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
 import type { Sale, PurchaseOrder, SupplierDebt, InventoryItem, Product } from "@/lib/types"
 import {
@@ -14,20 +14,6 @@ import {
   Landmark, Warehouse,
 } from "lucide-react"
 import { useTheme } from "@/lib/theme/theme-provider"
-
-// Get last N months as labels + YYYY-MM keys
-function lastNMonths(n: number) {
-  const result: { label: string; key: string }[] = []
-  const now = new Date()
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    result.push({
-      label: d.toLocaleString("default", { month: "short" }),
-      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-    })
-  }
-  return result
-}
 
 export default function DashboardPage() {
   const { t } = useI18n()
@@ -56,22 +42,31 @@ export default function DashboardPage() {
     .filter((d) => d.status !== "paid")
     .reduce((sum, d) => sum + d.remainingDebt, 0)
 
-  const inventoryValue = inventory.reduce((sum, item) => {
-    const prod = products.find((p) => p.id === item.productId)
-    return sum + item.stock * (prod?.cost ?? 0)
-  }, 0)
+  // Build product cost map once — O(n) instead of O(n²) find() inside reduce
+  const productCostMap = new Map(products.map((p) => [p.id, p.cost ?? 0]))
+  const inventoryValue = inventory.reduce(
+    (sum, item) => sum + item.stock * (productCostMap.get(item.productId) ?? 0),
+    0
+  )
 
-  // ── Monthly chart (last 6 months) ──────────────────────────
+  // ── Monthly chart (last 6 months) — single pass per dataset ─
   const months = lastNMonths(6)
-  const chartData = months.map(({ label, key }) => {
-    const rev = completedSales
-      .filter((s) => s.date.startsWith(key))
-      .reduce((s, sale) => s + sale.total, 0)
-    const exp = purchases
-      .filter((p) => p.status !== "cancelled" && p.date.startsWith(key))
-      .reduce((s, p) => s + p.total, 0)
-    return { label, revenue: rev, expenses: exp }
-  })
+  const salesByMonth = new Map<string, number>()
+  for (const s of completedSales) {
+    const k = s.date.slice(0, 7)
+    salesByMonth.set(k, (salesByMonth.get(k) ?? 0) + s.total)
+  }
+  const expByMonth = new Map<string, number>()
+  for (const p of purchases) {
+    if (p.status === "cancelled") continue
+    const k = p.date.slice(0, 7)
+    expByMonth.set(k, (expByMonth.get(k) ?? 0) + p.total)
+  }
+  const chartData = months.map(({ label, key }) => ({
+    label,
+    revenue: salesByMonth.get(key) ?? 0,
+    expenses: expByMonth.get(key) ?? 0,
+  }))
 
   const maxChartVal = Math.max(...chartData.map((d) => Math.max(d.revenue, d.expenses)), 1)
 

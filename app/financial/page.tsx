@@ -7,22 +7,9 @@ import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
 import { useSupabaseData } from "@/hooks/use-supabase-data"
 import { PageHeader } from "@/components/layout/page-header"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, lastNMonths } from "@/lib/utils"
 import type { Sale, PurchaseOrder, SupplierDebt, Product } from "@/lib/types"
 import { DollarSign, TrendingUp, TrendingDown, Landmark, BarChart3 } from "lucide-react"
-
-function lastNMonths(n: number) {
-  const result: { label: string; key: string }[] = []
-  const now = new Date()
-  for (let i = n - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    result.push({
-      label: d.toLocaleString("default", { month: "short" }),
-      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-    })
-  }
-  return result
-}
 
 export default function FinancialPage() {
   const { t } = useI18n()
@@ -56,17 +43,22 @@ export default function FinancialPage() {
     .filter((p) => p.status !== "cancelled")
     .reduce((sum, p) => sum + (p.amountPaid || 0), 0)
 
-  // ── Monthly P&L chart ────────────────────────────────────────
+  // ── Monthly P&L chart — single pass over completedSales ─────
   const months = lastNMonths(6)
+  const monthlyPnl = new Map<string, { revenue: number; cogs: number }>()
+  for (const sale of completedSales) {
+    const k = sale.date.slice(0, 7)
+    const entry = monthlyPnl.get(k) ?? { revenue: 0, cogs: 0 }
+    entry.revenue += sale.total
+    entry.cogs += (sale.items ?? []).reduce(
+      (s, item) => s + (item?.qty ?? 0) * (item?.costAtSale ?? 0),
+      0
+    )
+    monthlyPnl.set(k, entry)
+  }
   const pnlData = months.map(({ label, key }) => {
-    const rev = completedSales
-      .filter((s) => s.date.startsWith(key))
-      .reduce((s, sale) => s + sale.total, 0)
-    const cost = completedSales
-      .filter((s) => s.date.startsWith(key))
-      .flatMap((s) => s.items ?? [])
-      .reduce((s, item) => s + (item?.qty ?? 0) * (item?.costAtSale ?? 0), 0)
-    return { label, revenue: rev, cogs: cost, profit: rev - cost }
+    const { revenue, cogs } = monthlyPnl.get(key) ?? { revenue: 0, cogs: 0 }
+    return { label, revenue, cogs, profit: revenue - cogs }
   })
   const maxPnl = Math.max(...pnlData.map((d) => Math.max(d.revenue, d.cogs)), 1)
 

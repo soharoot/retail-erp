@@ -165,6 +165,9 @@ export default function ProductsPage() {
   const totalProducts = safeProducts.length
   const activeProducts = safeProducts.filter((p) => p.status === "active").length
   const totalCategories = safeCategories.length
+  const lowStockCount = safeInventory.filter(
+    (i) => (i.stock ?? 0) > 0 && (i.stock ?? 0) <= (i.minStock ?? 10)
+  ).length
 
   const statusColor = (s: string) =>
     s === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
@@ -184,7 +187,7 @@ export default function ProductsPage() {
           { label: t("products.totalProducts"), value: totalProducts, icon: Package, color: "text-indigo-600 bg-indigo-50" },
           { label: t("products.activeProducts"), value: activeProducts, icon: Package, color: "text-green-600 bg-green-50" },
           { label: t("products.categories"), value: totalCategories, icon: Tag, color: "text-purple-600 bg-purple-50" },
-          { label: t("products.lowStock"), value: totalProducts - activeProducts, icon: Package, color: "text-gray-600 bg-gray-50" },
+          { label: t("products.lowStock"), value: lowStockCount, icon: Package, color: lowStockCount > 0 ? "text-amber-600 bg-amber-50" : "text-gray-600 bg-gray-50" },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">

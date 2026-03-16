@@ -87,6 +87,20 @@ export function getStatusColor(status: string): string {
   return colors[status.toLowerCase()] || "bg-gray-100 text-gray-700"
 }
 
+/** Returns the last N calendar months as display label + YYYY-MM key. */
+export function lastNMonths(n: number): { label: string; key: string }[] {
+  const result: { label: string; key: string }[] = []
+  const now = new Date()
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    result.push({
+      label: d.toLocaleString("default", { month: "short" }),
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+    })
+  }
+  return result
+}
+
 export function getCategoryColor(category: string): string {
   const colors: Record<string, string> = {
     electronics: "bg-blue-100 text-blue-700",
