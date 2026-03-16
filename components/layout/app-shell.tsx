@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         collapsed ? "lg:pl-[70px]" : "lg:pl-64"
       )}>
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <main className="p-4 sm:p-6 lg:p-8">
+        <main className="erp-main">
           {children}
         </main>
       </div>

@@ -13,6 +13,7 @@ import {
   ShoppingCart, ClipboardList, Package, BarChart3,
   Landmark, Warehouse,
 } from "lucide-react"
+import { useTheme } from "@/lib/theme/theme-provider"
 
 // Get last N months as labels + YYYY-MM keys
 function lastNMonths(n: number) {
@@ -30,6 +31,7 @@ function lastNMonths(n: number) {
 
 export default function DashboardPage() {
   const { t } = useI18n()
+  const { preferences } = useTheme()
   const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
   const [purchases] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
   const [debts] = useSupabaseData<SupplierDebt[]>("erp-supplier-debts", [])
@@ -129,18 +131,31 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid gap-4 ${preferences.dashboardLayout === "list" ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-4"}`}>
         {kpis.map((kpi) => (
-          <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-gray-500">{kpi.title}</p>
-              <span className={`rounded-lg p-2 ${kpi.color}`}>
-                <kpi.icon className="h-4 w-4" />
+          preferences.dashboardLayout === "list" ? (
+            <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white px-5 py-4 shadow-sm flex items-center gap-4">
+              <span className={`rounded-lg p-2.5 flex-shrink-0 ${kpi.color}`}>
+                <kpi.icon className="h-5 w-5" />
               </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-500">{kpi.title}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{kpi.sub}</p>
+              </div>
+              <p className="text-xl font-bold text-gray-900 flex-shrink-0">{kpi.value}</p>
             </div>
-            <p className="mt-3 text-2xl font-bold text-gray-900">{kpi.value}</p>
-            <p className="mt-1 text-xs text-gray-400">{kpi.sub}</p>
-          </div>
+          ) : (
+            <div key={kpi.title} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-gray-500">{kpi.title}</p>
+                <span className={`rounded-lg p-2 ${kpi.color}`}>
+                  <kpi.icon className="h-4 w-4" />
+                </span>
+              </div>
+              <p className="mt-3 text-2xl font-bold text-gray-900">{kpi.value}</p>
+              <p className="mt-1 text-xs text-gray-400">{kpi.sub}</p>
+            </div>
+          )
         ))}
       </div>
 

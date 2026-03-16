@@ -112,6 +112,19 @@ export interface Settings {
   twoFactor: boolean
 }
 
+// ── User Preferences (per-user, not org-wide) ─────────────────
+export interface UserPreferences {
+  theme: "light" | "dark" | "system"
+  interfaceStyle: "default" | "compact" | "comfortable"
+  dashboardLayout: "grid" | "list"
+}
+
+export const defaultUserPreferences: UserPreferences = {
+  theme: "system",
+  interfaceStyle: "default",
+  dashboardLayout: "grid",
+}
+
 export const defaultSettings: Settings = {
   companyName: "Retail ERP Corp",
   address: "123 Business Avenue, Suite 100",

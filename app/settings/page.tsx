@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/layout/page-header"
 import { Building2, Globe, CreditCard, Bell, Palette, Database, Save } from "lucide-react"
 import type { Settings } from "@/lib/types"
 import { defaultSettings } from "@/lib/types"
+import { useTheme } from "@/lib/theme/theme-provider"
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("company")
@@ -21,6 +22,7 @@ export default function SettingsPage() {
   const { setLanguage } = useI18n()
   const { user } = useAuth()
   const { orgId } = useRBAC()
+  const { preferences, setPreferences } = useTheme()
 
   const handleSave = () => {
     setSaved(true)
@@ -169,47 +171,90 @@ export default function SettingsPage() {
             )}
 
             {activeTab === "appearance" && (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">Appearance</h3>
-                  <p className="text-sm text-gray-500">Customize the look and feel</p>
+                  <p className="text-sm text-gray-500">Customize the look and feel of your workspace</p>
                 </div>
+
+                {/* Theme */}
                 <div>
                   <label className={labelClass}>Theme</label>
-                  <div className="flex gap-3 mt-2">
-                    {[
-                      { name: "Light", color: "bg-white border-2 border-indigo-500" },
-                      { name: "Dark", color: "bg-gray-900" },
-                      { name: "System", color: "bg-gradient-to-r from-white to-gray-900" },
-                    ].map(theme => (
-                      <button key={theme.name} className="flex flex-col items-center gap-2">
-                        <div className={`w-16 h-12 rounded-lg border border-gray-200 ${theme.color}`} />
-                        <span className="text-xs font-medium text-gray-600">{theme.name}</span>
+                  <p className="text-xs text-gray-500 mb-3">Controls light / dark appearance of the interface</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {([
+                      { value: "light"  as const, label: "Light",  previewClass: "bg-white" },
+                      { value: "dark"   as const, label: "Dark",   previewClass: "bg-gray-900" },
+                      { value: "system" as const, label: "System", previewClass: "bg-gradient-to-br from-white to-gray-900" },
+                    ]).map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setPreferences({ ...preferences, theme: opt.value })}
+                        className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-colors ${
+                          preferences.theme === opt.value
+                            ? "border-indigo-500 bg-indigo-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className={`w-full h-10 rounded-lg border border-gray-200 ${opt.previewClass}`} />
+                        <span className="text-xs font-medium text-gray-700">{opt.label}</span>
                       </button>
                     ))}
                   </div>
                 </div>
+
+                {/* Interface Density */}
                 <div>
-                  <label className={labelClass}>Primary Color</label>
-                  <div className="flex gap-3 mt-2">
-                    {[
-                      { name: "Indigo", color: "bg-indigo-600", selected: true },
-                      { name: "Blue", color: "bg-blue-600" },
-                      { name: "Green", color: "bg-green-600" },
-                      { name: "Purple", color: "bg-purple-600" },
-                      { name: "Red", color: "bg-red-600" },
-                    ].map(c => (
-                      <button key={c.name} className={`w-8 h-8 rounded-full ${c.color} ${c.selected ? "ring-2 ring-offset-2 ring-indigo-600" : ""}`} title={c.name} />
+                  <label className={labelClass}>Interface Density</label>
+                  <p className="text-xs text-gray-500 mb-3">Adjust spacing and padding of the main content area</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {([
+                      { value: "default"      as const, label: "Default",     desc: "Balanced spacing" },
+                      { value: "compact"      as const, label: "Compact",     desc: "Tighter spacing" },
+                      { value: "comfortable"  as const, label: "Comfortable", desc: "More room to breathe" },
+                    ]).map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setPreferences({ ...preferences, interfaceStyle: opt.value })}
+                        className={`flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-colors ${
+                          preferences.interfaceStyle === opt.value
+                            ? "border-indigo-500 bg-indigo-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <span className="text-sm font-medium text-gray-700">{opt.label}</span>
+                        <span className="text-xs text-gray-400">{opt.desc}</span>
+                      </button>
                     ))}
                   </div>
                 </div>
+
+                {/* Dashboard Layout */}
                 <div>
-                  <label className={labelClass}>Sidebar Style</label>
-                  <div className="flex gap-3 mt-2">
-                    <button className="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white">Default</button>
-                    <button className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Compact</button>
+                  <label className={labelClass}>Dashboard Layout</label>
+                  <p className="text-xs text-gray-500 mb-3">How KPI cards are displayed on the dashboard</p>
+                  <div className="flex gap-3">
+                    {([
+                      { value: "grid" as const, label: "Grid", icon: "⊞" },
+                      { value: "list" as const, label: "List", icon: "☰" },
+                    ]).map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setPreferences({ ...preferences, dashboardLayout: opt.value })}
+                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-colors ${
+                          preferences.dashboardLayout === opt.value
+                            ? "border-indigo-500 bg-indigo-50 text-indigo-600"
+                            : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        <span className="text-base leading-none">{opt.icon}</span>
+                        <span className="text-sm font-medium">{opt.label}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
+
+                <p className="text-xs text-gray-400 italic">Changes are saved automatically per user.</p>
               </div>
             )}
 

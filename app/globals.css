@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode (add .dark class to <html> to activate) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --color-background: #ffffff;
   --color-foreground: #111827;
@@ -14,24 +17,29 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark body background */
+.dark body {
+  background-color: rgb(17 24 39);
+  color: rgb(249 250 251);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: #d1d5db;
   border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: #9ca3af;
 }
+.dark ::-webkit-scrollbar-thumb       { background: #4b5563; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
 
 /* Table styles */
 table {
@@ -41,9 +49,67 @@ table {
 /* Animation */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* ── Main content area — controlled by interface density ──── */
+.erp-main { padding: 1rem; }
+@media (min-width: 640px)  { .erp-main { padding: 1.5rem; } }
+@media (min-width: 1024px) { .erp-main { padding: 2rem;   } }
+
+/* Compact density */
+.interface-compact .erp-main { padding: 0.75rem; }
+@media (min-width: 640px)  { .interface-compact .erp-main { padding: 1rem;   } }
+@media (min-width: 1024px) { .interface-compact .erp-main { padding: 1.25rem; } }
+
+/* Comfortable density */
+.interface-comfortable .erp-main { padding: 2rem; }
+@media (min-width: 640px)  { .interface-comfortable .erp-main { padding: 2.5rem; } }
+@media (min-width: 1024px) { .interface-comfortable .erp-main { padding: 3rem;   } }
+
+/* ── Dark mode cascade overrides ─────────────────────────── */
+/* Specificity 0,2,0 overrides Tailwind utilities at 0,1,0   */
+
+/* Backgrounds */
+.dark .bg-white      { background-color: rgb(31 41 55);  }  /* gray-800 — card bg */
+.dark .bg-gray-50    { background-color: rgb(17 24 39);  }  /* gray-900 — page bg  */
+.dark .bg-gray-100   { background-color: rgb(55 65 81);  }  /* gray-700 — hover bg */
+.dark .bg-gray-200   { background-color: rgb(75 85 99);  }  /* gray-600 */
+
+/* Text */
+.dark .text-gray-900 { color: rgb(249 250 251); }  /* → gray-50  */
+.dark .text-gray-800 { color: rgb(243 244 246); }  /* → gray-100 */
+.dark .text-gray-700 { color: rgb(229 231 235); }  /* → gray-200 */
+.dark .text-gray-600 { color: rgb(209 213 219); }  /* → gray-300 */
+.dark .text-gray-500 { color: rgb(156 163 175); }  /* → gray-400 */
+
+/* Borders */
+.dark .border-gray-200 { border-color: rgb(55 65 81); }   /* gray-700 */
+.dark .border-gray-100 { border-color: rgb(31 41 55); }   /* gray-800 */
+
+/* Dividers */
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(31 41 55); }
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(55 65 81); }
+
+/* Hover states */
+.dark .hover\:bg-gray-50:hover  { background-color: rgb(55 65 81); }
+.dark .hover\:bg-gray-100:hover { background-color: rgb(55 65 81); }
+.dark .hover\:bg-gray-200:hover { background-color: rgb(75 85 99); }
+
+/* Form controls */
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.dark textarea,
+.dark select {
+  background-color: rgb(31 41 55);
+  border-color: rgb(55 65 81);
+  color: rgb(249 250 251);
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: rgb(107 114 128); }
+
+/* Shadows */
+.dark .shadow-sm { box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.4); }
+.dark .shadow    { box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.5); }

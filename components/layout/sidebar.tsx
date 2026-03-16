@@ -128,7 +128,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                       isActive
                         ? "bg-indigo-600 text-white"
-                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-700 dark:hover:text-white",
                       collapsed && "justify-center px-2"
                     )}
                   >
