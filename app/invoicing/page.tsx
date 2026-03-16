@@ -5,11 +5,11 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useTableData } from "@/hooks/use-table-data"
+import { useSettings } from "@/hooks/use-settings"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import type { Sale, PurchaseOrder, Settings } from "@/lib/types"
-import { defaultSettings } from "@/lib/types"
+import type { Sale, PurchaseOrder } from "@/lib/types"
 import { FileText, Printer, X, ShoppingCart, ShoppingBag, TrendingUp } from "lucide-react"
 
 type InvoiceType = "sale" | "purchase"
@@ -17,6 +17,7 @@ type FilterType = "all" | "sale" | "purchase"
 
 interface UnifiedInvoice {
   id: string
+  refNumber: string
   type: InvoiceType
   date: string
   party: string
@@ -29,86 +30,90 @@ interface UnifiedInvoice {
 }
 
 export default function InvoicingPage() {
-  const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
-  const [purchases] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
-  const [settings] = useSupabaseData<Settings>("erp-settings", defaultSettings)
-
   const { t } = useI18n()
+  const [settings] = useSettings()
+
+  const { data: sales } = useTableData<Sale>("sales", { select: "*, sale_items(*)" })
+  const { data: purchases } = useTableData<PurchaseOrder>("purchase_orders", { select: "*, purchase_items(*)" })
+
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState<FilterType>("all")
   const [printInvoice, setPrintInvoice] = useState<UnifiedInvoice | null>(null)
 
-  const taxRate = parseFloat(settings?.taxRate ?? "10") / 100
-  const taxRateLabel = `${parseFloat(settings?.taxRate ?? "10")}%`
-  const companyName = settings?.companyName || "Retail ERP Store"
+  const taxRate = (settings.taxRate ?? 0) / 100
+  const taxRateLabel = `${settings.taxRate ?? 0}%`
+  const companyName = settings.companyName || "Retail ERP Store"
 
-  const safeSales = (Array.isArray(sales) ? sales : []).filter(Boolean) as Sale[]
-  const safePurchases = (Array.isArray(purchases) ? purchases : []).filter(Boolean) as PurchaseOrder[]
+  // Build sale invoices — exclude cancelled
+  const saleInvoices: UnifiedInvoice[] = sales
+    .filter((s) => s.status !== "cancelled")
+    .map((s) => {
+      const items = (s.items ?? []).map((i) => ({
+        name: i.productName ?? "",
+        qty: i.quantity ?? 0,
+        price: i.unitPrice ?? 0,
+      }))
+      const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0)
+      return {
+        id: s.id,
+        refNumber: s.saleNumber ?? s.id,
+        type: "sale" as const,
+        date: s.date,
+        party: s.customerName ?? "",
+        items,
+        subtotal,
+        tax: s.tax ?? subtotal * taxRate,
+        total: s.total ?? 0,
+        status: s.status,
+        payment: s.paymentMethod,
+      }
+    })
 
-  // Build sale invoices
-  const saleInvoices: UnifiedInvoice[] = safeSales.map((s) => {
-    const items = (s.items ?? []).map((i) => ({
-      name: i.name ?? "",
-      qty: i.qty ?? 0,
-      price: i.price ?? 0,
-    }))
-    const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0)
-    return {
-      id: s.id,
-      type: "sale",
-      date: s.date,
-      party: s.customer ?? "",
-      items,
-      subtotal,
-      tax: subtotal * taxRate,
-      total: s.total ?? 0,
-      status: s.status,
-      payment: s.payment,
-    }
-  })
-
-  // Build purchase invoices
-  const purchaseInvoices: UnifiedInvoice[] = safePurchases.map((p) => {
-    const items = (p.items ?? []).map((i) => ({
-      name: i.name ?? "",
-      qty: i.qty ?? 0,
-      price: i.cost ?? 0,
-    }))
-    const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0)
-    return {
-      id: p.id,
-      type: "purchase",
-      date: p.date,
-      party: p.supplier ?? "",
-      items,
-      subtotal,
-      tax: 0,
-      total: p.total ?? 0,
-      status: p.status,
-    }
-  })
+  // Build purchase invoices — exclude cancelled
+  const purchaseInvoices: UnifiedInvoice[] = purchases
+    .filter((p) => p.status !== "cancelled")
+    .map((p) => {
+      const items = (p.items ?? []).map((i) => ({
+        name: i.productName ?? "",
+        qty: i.quantity ?? 0,
+        price: i.unitCost ?? 0,
+      }))
+      const subtotal = items.reduce((sum, i) => sum + i.qty * i.price, 0)
+      return {
+        id: p.id,
+        refNumber: p.poNumber ?? p.id,
+        type: "purchase" as const,
+        date: p.date,
+        party: p.supplierName ?? "",
+        items,
+        subtotal,
+        tax: 0,
+        total: p.total ?? 0,
+        status: p.status,
+      }
+    })
 
   // Merge and sort by date desc
   const allInvoices: UnifiedInvoice[] = [...saleInvoices, ...purchaseInvoices].sort(
-    (a, b) => b.date.localeCompare(a.date)
+    (a, b) => (b.date ?? "").localeCompare(a.date ?? "")
   )
 
   const filtered = allInvoices.filter((inv) => {
     const matchFilter = filter === "all" || inv.type === filter
     const q = search.toLowerCase()
     const matchSearch =
-      inv.id.toLowerCase().includes(q) || inv.party.toLowerCase().includes(q)
+      inv.refNumber.toLowerCase().includes(q) || inv.party.toLowerCase().includes(q)
     return matchFilter && matchSearch
   })
 
-  const totalValue = allInvoices.reduce((s, i) => s + i.total, 0)
+  const totalSalesValue = saleInvoices.reduce((s, i) => s + i.total, 0)
+  const totalPurchasesValue = purchaseInvoices.reduce((s, i) => s + i.total, 0)
 
   const statusColor = (status: string, type: InvoiceType) => {
     if (type === "sale") {
       const map: Record<string, string> = {
         completed: "bg-green-100 text-green-700",
         pending: "bg-yellow-100 text-yellow-700",
-        cancelled: "bg-gray-100 text-gray-600",
         refunded: "bg-red-100 text-red-700",
       }
       return map[status] ?? "bg-gray-100 text-gray-600"
@@ -116,7 +121,7 @@ export default function InvoicingPage() {
     const map: Record<string, string> = {
       received: "bg-green-100 text-green-700",
       pending: "bg-yellow-100 text-yellow-700",
-      cancelled: "bg-gray-100 text-gray-600",
+      approved: "bg-blue-100 text-blue-700",
     }
     return map[status] ?? "bg-gray-100 text-gray-600"
   }
@@ -126,16 +131,16 @@ export default function InvoicingPage() {
     <div className="space-y-6 animate-fade-in">
       <PageHeader
         title={t("nav.invoicing")}
-        subtitle={t("nav.invoicing")}
+        subtitle="Manage sales and purchase invoices"
       />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: t("common.total") + " " + t("nav.invoicing"), value: String(allInvoices.length), icon: FileText, color: "text-indigo-600 bg-indigo-50" },
-          { label: t("nav.sales") + " " + t("nav.invoicing"), value: String(saleInvoices.length), icon: ShoppingCart, color: "text-green-600 bg-green-50" },
-          { label: t("nav.purchases") + " " + t("nav.invoicing"), value: String(purchaseInvoices.length), icon: ShoppingBag, color: "text-blue-600 bg-blue-50" },
-          { label: t("supplierDebts.totalAmount"), value: formatCurrency(totalValue), icon: TrendingUp, color: "text-purple-600 bg-purple-50" },
+          { label: "Total Invoices", value: String(allInvoices.length), icon: FileText, color: "text-indigo-600 bg-indigo-50" },
+          { label: "Sales Invoices", value: String(saleInvoices.length), icon: ShoppingCart, color: "text-green-600 bg-green-50" },
+          { label: "Purchase Invoices", value: String(purchaseInvoices.length), icon: ShoppingBag, color: "text-blue-600 bg-blue-50" },
+          { label: "Sales Revenue", value: formatCurrency(totalSalesValue), icon: TrendingUp, color: "text-purple-600 bg-purple-50" },
         ].map((kpi) => (
           <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
@@ -195,7 +200,7 @@ export default function InvoicingPage() {
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Invoice #</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.status")}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Type</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.date")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Customer / Supplier</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("common.total")}</th>
@@ -206,7 +211,7 @@ export default function InvoicingPage() {
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((inv) => (
                   <tr key={`${inv.type}-${inv.id}`} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-medium text-gray-900">{inv.id}</td>
+                    <td className="px-4 py-3 font-mono text-xs font-medium text-gray-900">{inv.refNumber}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                         inv.type === "sale" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"
@@ -250,7 +255,7 @@ export default function InvoicingPage() {
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-lg font-semibold text-gray-900">
-                {printInvoice.type === "sale" ? t("nav.sales") + " " + t("nav.invoicing") : t("nav.purchases") + " " + t("nav.invoicing")}
+                {printInvoice.type === "sale" ? "Sales Invoice" : "Purchase Invoice"}
               </h2>
               <div className="flex gap-2">
                 <button
@@ -282,7 +287,7 @@ export default function InvoicingPage() {
               <div className="flex justify-between text-sm">
                 <div>
                   <p className="text-xs uppercase font-medium text-gray-500 mb-1">Invoice #</p>
-                  <p className="font-bold text-gray-900">{printInvoice.id}</p>
+                  <p className="font-bold text-gray-900">{printInvoice.refNumber}</p>
                   <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
                     printInvoice.type === "sale" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"
                   }`}>
@@ -332,7 +337,7 @@ export default function InvoicingPage() {
                     <td colSpan={3} className="pt-3 text-right text-gray-500">{t("sales.subtotal")}</td>
                     <td className="pt-3 text-right text-gray-900">{formatCurrency(printInvoice.subtotal)}</td>
                   </tr>
-                  {printInvoice.type === "sale" && (
+                  {printInvoice.type === "sale" && printInvoice.tax > 0 && (
                     <tr>
                       <td colSpan={3} className="text-right text-gray-500">{t("sales.tax")} ({taxRateLabel})</td>
                       <td className="text-right text-gray-900">{formatCurrency(printInvoice.tax)}</td>

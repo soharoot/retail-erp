@@ -4,7 +4,7 @@ import { PageGuard } from "@/components/shared/permission-guard"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import Link from "next/link"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useTableData } from "@/hooks/use-table-data"
 import { formatCurrency, formatDate, lastNMonths } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
 import type { Sale, PurchaseOrder, SupplierDebt, InventoryItem, Product } from "@/lib/types"
@@ -18,34 +18,37 @@ import { useTheme } from "@/lib/theme/theme-provider"
 export default function DashboardPage() {
   const { t } = useI18n()
   const { preferences } = useTheme()
-  const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
-  const [purchases] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
-  const [debts] = useSupabaseData<SupplierDebt[]>("erp-supplier-debts", [])
-  const [inventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
-  const [products] = useSupabaseData<Product[]>("erp-products", [])
+
+  const { data: sales, loading: salesLoading } = useTableData<Sale>("sales", {
+    select: "*, sale_items(*)",
+  })
+  const { data: purchases } = useTableData<PurchaseOrder>("purchase_orders")
+  const { data: debts } = useTableData<SupplierDebt>("supplier_debts")
+  const { data: inventory } = useTableData<InventoryItem>("inventory")
+  const { data: products } = useTableData<Product>("products")
 
   // ── KPI calculations ────────────────────────────────────────
   const completedSales = sales.filter((s) => s.status === "completed")
-  const totalRevenue = completedSales.reduce((sum, s) => sum + s.total, 0)
+  const totalRevenue = completedSales.reduce((sum, s) => sum + (s.total ?? 0), 0)
 
   const cogs = completedSales
     .flatMap((s) => s.items ?? [])
-    .reduce((sum, item) => sum + (item?.qty ?? 0) * (item?.costAtSale ?? 0), 0)
+    .reduce((sum, item) => sum + ((item?.quantity ?? 0) * (item?.costAtSale ?? 0)), 0)
 
   const netProfit = totalRevenue - cogs
 
   const totalExpenses = purchases
     .filter((p) => p.status !== "cancelled")
-    .reduce((sum, p) => sum + p.total, 0)
+    .reduce((sum, p) => sum + (p.total ?? 0), 0)
 
   const outstandingDebt = debts
     .filter((d) => d.status !== "paid")
-    .reduce((sum, d) => sum + d.remainingDebt, 0)
+    .reduce((sum, d) => sum + (d.remainingDebt ?? 0), 0)
 
-  // Build product cost map once — O(n) instead of O(n²) find() inside reduce
+  // Build product cost map once
   const productCostMap = new Map(products.map((p) => [p.id, p.cost ?? 0]))
   const inventoryValue = inventory.reduce(
-    (sum, item) => sum + item.stock * (productCostMap.get(item.productId) ?? 0),
+    (sum, item) => sum + (item.stock ?? 0) * (productCostMap.get(item.productId) ?? 0),
     0
   )
 
@@ -53,14 +56,14 @@ export default function DashboardPage() {
   const months = lastNMonths(6)
   const salesByMonth = new Map<string, number>()
   for (const s of completedSales) {
-    const k = s.date.slice(0, 7)
-    salesByMonth.set(k, (salesByMonth.get(k) ?? 0) + s.total)
+    const k = (s.date ?? "").slice(0, 7)
+    if (k) salesByMonth.set(k, (salesByMonth.get(k) ?? 0) + (s.total ?? 0))
   }
   const expByMonth = new Map<string, number>()
   for (const p of purchases) {
     if (p.status === "cancelled") continue
-    const k = p.date.slice(0, 7)
-    expByMonth.set(k, (expByMonth.get(k) ?? 0) + p.total)
+    const k = (p.date ?? "").slice(0, 7)
+    if (k) expByMonth.set(k, (expByMonth.get(k) ?? 0) + (p.total ?? 0))
   }
   const chartData = months.map(({ label, key }) => ({
     label,
@@ -72,14 +75,20 @@ export default function DashboardPage() {
 
   // ── Recent transactions (last 5 sales) ─────────────────────
   const recentSales = [...sales]
-    .sort((a, b) => b.date.localeCompare(a.date))
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
     .slice(0, 5)
 
   // ── Low stock items ─────────────────────────────────────────
+  const productNameMap = new Map(products.map((p) => [p.id, { name: p.name, category: p.category }]))
   const lowStockItems = inventory
     .filter((i) => (i.stock ?? 0) <= (i.minStock ?? 10))
     .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0))
     .slice(0, 5)
+    .map((i) => ({
+      ...i,
+      productName: productNameMap.get(i.productId)?.name ?? "Unknown",
+      category: productNameMap.get(i.productId)?.category ?? "",
+    }))
 
   const kpis = [
     {
@@ -237,7 +246,9 @@ export default function DashboardPage() {
             <h2 className="text-sm font-semibold text-gray-900">{t("dashboard.recentTransactions")}</h2>
             <Link href="/sales" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">View all</Link>
           </div>
-          {recentSales.length === 0 ? (
+          {salesLoading ? (
+            <div className="py-12 text-center text-sm text-gray-400">Loading...</div>
+          ) : recentSales.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">
               {t("dashboard.noTransactions")}
             </div>
@@ -246,8 +257,8 @@ export default function DashboardPage() {
               {recentSales.map((sale) => (
                 <div key={sale.id} className="flex items-center justify-between px-5 py-3">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{sale.customer}</p>
-                    <p className="text-xs text-gray-400">{formatDate(sale.date)} · {sale.items.length} items</p>
+                    <p className="text-sm font-medium text-gray-900">{sale.customerName}</p>
+                    <p className="text-xs text-gray-400">{formatDate(sale.date)} · {(sale.items ?? []).length} items</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-gray-900">{formatCurrency(sale.total)}</p>
@@ -278,15 +289,15 @@ export default function DashboardPage() {
               {lowStockItems.map((item) => (
                 <div key={item.id} className="flex items-center justify-between px-5 py-3">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle className={`h-4 w-4 flex-shrink-0 ${item.stock === 0 ? "text-red-500" : "text-yellow-500"}`} />
+                    <AlertTriangle className={`h-4 w-4 flex-shrink-0 ${(item.stock ?? 0) === 0 ? "text-red-500" : "text-yellow-500"}`} />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{item.productName}</p>
                       <p className="text-xs text-gray-400">{item.category}</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-semibold ${item.stock === 0 ? "text-red-600" : "text-yellow-600"}`}>
-                      {item.stock} left
+                    <p className={`text-sm font-semibold ${(item.stock ?? 0) === 0 ? "text-red-600" : "text-yellow-600"}`}>
+                      {item.stock ?? 0} left
                     </p>
                     <p className="text-xs text-gray-400">Min: {item.minStock}</p>
                   </div>

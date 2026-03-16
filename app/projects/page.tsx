@@ -4,7 +4,13 @@ import { PageGuard } from "@/components/shared/permission-guard"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
-import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
+import { useTableData, insertChildRows } from "@/hooks/use-table-data"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
+import { createClient } from "@/lib/supabase/client"
+import { toSnakeCase } from "@/lib/types"
+import type { Project, Task } from "@/lib/types"
 import {
   FolderKanban,
   PlayCircle,
@@ -15,153 +21,12 @@ import {
   ArrowLeft,
   Calendar,
   User,
+  Trash2,
 } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
-
-interface Task {
-  id: string
-  name: string
-  assignee: string
-  priority: string
-  status: string
-  dueDate: string
-}
-
-interface Project {
-  id: string
-  name: string
-  description: string
-  client: string
-  manager: string
-  startDate: string
-  endDate: string
-  budget: number
-  spent: number
-  progress: number
-  status: string
-  tasks: Task[]
-}
-
-const initialProjects: Project[] = [
-  {
-    id: "1",
-    name: "E-Commerce Platform Redesign",
-    description: "Complete overhaul of the online store frontend and checkout flow with modern UI/UX patterns",
-    client: "TechRetail Inc.",
-    manager: "James Wilson",
-    startDate: "2025-01-15",
-    endDate: "2025-06-30",
-    budget: 85000,
-    spent: 52000,
-    progress: 65,
-    status: "active",
-    tasks: [
-      { id: "t1", name: "Wireframe design", assignee: "Emily Zhang", priority: "high", status: "completed", dueDate: "2025-02-15" },
-      { id: "t2", name: "Frontend development", assignee: "Michael Johnson", priority: "high", status: "in-progress", dueDate: "2025-04-30" },
-      { id: "t3", name: "Payment integration", assignee: "Emily Zhang", priority: "medium", status: "pending", dueDate: "2025-05-15" },
-      { id: "t4", name: "User testing", assignee: "Laura Chen", priority: "medium", status: "pending", dueDate: "2025-06-01" },
-      { id: "t5", name: "Launch & deployment", assignee: "James Wilson", priority: "high", status: "pending", dueDate: "2025-06-30" },
-    ],
-  },
-  {
-    id: "2",
-    name: "Mobile App Development",
-    description: "Native iOS and Android app for customer self-service portal with push notifications",
-    client: "FinanceHub Ltd.",
-    manager: "Emily Zhang",
-    startDate: "2025-02-01",
-    endDate: "2025-08-31",
-    budget: 120000,
-    spent: 35000,
-    progress: 30,
-    status: "active",
-    tasks: [
-      { id: "t6", name: "Requirements gathering", assignee: "Emily Zhang", priority: "high", status: "completed", dueDate: "2025-02-28" },
-      { id: "t7", name: "UI/UX design", assignee: "Laura Chen", priority: "high", status: "in-progress", dueDate: "2025-04-15" },
-      { id: "t8", name: "Backend API development", assignee: "Michael Johnson", priority: "medium", status: "pending", dueDate: "2025-06-30" },
-      { id: "t9", name: "App store submission", assignee: "Emily Zhang", priority: "low", status: "pending", dueDate: "2025-08-15" },
-    ],
-  },
-  {
-    id: "3",
-    name: "Data Analytics Dashboard",
-    description: "Real-time business intelligence dashboard with interactive charts and automated reporting",
-    client: "DataCorp Systems",
-    manager: "Robert Taylor",
-    startDate: "2024-09-01",
-    endDate: "2025-03-15",
-    budget: 65000,
-    spent: 63000,
-    progress: 95,
-    status: "active",
-    tasks: [
-      { id: "t10", name: "Data pipeline setup", assignee: "James Wilson", priority: "high", status: "completed", dueDate: "2024-10-30" },
-      { id: "t11", name: "Dashboard UI", assignee: "Michael Johnson", priority: "high", status: "completed", dueDate: "2025-01-15" },
-      { id: "t12", name: "Report generation", assignee: "Robert Taylor", priority: "medium", status: "completed", dueDate: "2025-02-28" },
-      { id: "t13", name: "Final QA & handoff", assignee: "Laura Chen", priority: "high", status: "in-progress", dueDate: "2025-03-15" },
-    ],
-  },
-  {
-    id: "4",
-    name: "CRM System Integration",
-    description: "Integration of Salesforce CRM with internal ERP and marketing automation tools",
-    client: "GlobalTrade Co.",
-    manager: "Sarah Mitchell",
-    startDate: "2024-06-01",
-    endDate: "2024-12-31",
-    budget: 95000,
-    spent: 92000,
-    progress: 100,
-    status: "completed",
-    tasks: [
-      { id: "t14", name: "API mapping", assignee: "Emily Zhang", priority: "high", status: "completed", dueDate: "2024-07-15" },
-      { id: "t15", name: "Data migration", assignee: "James Wilson", priority: "high", status: "completed", dueDate: "2024-09-30" },
-      { id: "t16", name: "Testing & validation", assignee: "Laura Chen", priority: "medium", status: "completed", dueDate: "2024-11-30" },
-      { id: "t17", name: "Go-live support", assignee: "Sarah Mitchell", priority: "high", status: "completed", dueDate: "2024-12-31" },
-    ],
-  },
-  {
-    id: "5",
-    name: "Cloud Infrastructure Migration",
-    description: "Migrate on-premise servers to AWS cloud infrastructure with zero downtime strategy",
-    client: "SecureNet Inc.",
-    manager: "Kevin Brown",
-    startDate: "2025-03-01",
-    endDate: "2025-09-30",
-    budget: 150000,
-    spent: 12000,
-    progress: 10,
-    status: "active",
-    tasks: [
-      { id: "t18", name: "Infrastructure audit", assignee: "Kevin Brown", priority: "high", status: "in-progress", dueDate: "2025-04-01" },
-      { id: "t19", name: "Migration plan", assignee: "James Wilson", priority: "high", status: "pending", dueDate: "2025-05-15" },
-      { id: "t20", name: "Staging environment", assignee: "Michael Johnson", priority: "medium", status: "pending", dueDate: "2025-07-01" },
-    ],
-  },
-  {
-    id: "6",
-    name: "Brand Identity Refresh",
-    description: "Complete rebrand including logo, website, marketing collateral and brand guidelines",
-    client: "FreshStart LLC",
-    manager: "Laura Chen",
-    startDate: "2025-01-10",
-    endDate: "2025-04-30",
-    budget: 45000,
-    spent: 15000,
-    progress: 40,
-    status: "on-hold",
-    tasks: [
-      { id: "t21", name: "Brand research", assignee: "Laura Chen", priority: "high", status: "completed", dueDate: "2025-02-01" },
-      { id: "t22", name: "Logo concepts", assignee: "Laura Chen", priority: "high", status: "completed", dueDate: "2025-02-20" },
-      { id: "t23", name: "Website mockups", assignee: "Emily Zhang", priority: "medium", status: "pending", dueDate: "2025-03-15" },
-      { id: "t24", name: "Collateral design", assignee: "Laura Chen", priority: "low", status: "pending", dueDate: "2025-04-15" },
-      { id: "t25", name: "Brand guidelines doc", assignee: "Laura Chen", priority: "medium", status: "pending", dueDate: "2025-04-30" },
-    ],
-  },
-]
 
 const projectTabs = ["All Projects", "Active", "Completed", "On Hold"] as const
 
@@ -169,6 +34,12 @@ const priorityColors: Record<string, string> = {
   high: "bg-red-100 text-red-700",
   medium: "bg-yellow-100 text-yellow-700",
   low: "bg-blue-100 text-blue-700",
+}
+
+const taskStatusLabels: Record<string, string> = {
+  todo: "To Do",
+  "in-progress": "In Progress",
+  done: "Done",
 }
 
 const emptyProjectForm = {
@@ -182,7 +53,7 @@ const emptyProjectForm = {
 }
 
 const emptyTaskForm = {
-  name: "",
+  title: "",
   assignee: "",
   priority: "medium",
   dueDate: "",
@@ -190,7 +61,14 @@ const emptyTaskForm = {
 
 export default function ProjectsPage() {
   const { t } = useI18n()
-  const [projects, setProjects] = useLocalStorage<Project[]>("erp-projects", initialProjects)
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
+
+  // ── Data from normalized DB tables (projects with nested tasks) ──
+  const { data: projects, loading, insert, update, remove, refresh } = useTableData<Project>("projects", {
+    select: "*, tasks(*)",
+  })
+
   const [activeTab, setActiveTab] = useState<string>("All Projects")
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -202,7 +80,7 @@ export default function ProjectsPage() {
   const totalProjects = projects.length
   const activeProjects = projects.filter((p) => p.status === "active").length
   const completedProjects = projects.filter((p) => p.status === "completed").length
-  const totalBudget = projects.reduce((sum, p) => sum + p.budget, 0)
+  const totalBudget = projects.reduce((sum, p) => sum + (p.budget ?? 0), 0)
 
   // Filter projects
   const filteredProjects = projects.filter((p) => {
@@ -212,6 +90,11 @@ export default function ProjectsPage() {
     if (activeTab === "On Hold") return p.status === "on-hold"
     return true
   })
+
+  // Keep selectedProject in sync with data
+  const currentProject = selectedProject
+    ? projects.find((p) => p.id === selectedProject.id) || selectedProject
+    : null
 
   const getProgressColor = (progress: number) => {
     if (progress < 30) return "bg-red-500"
@@ -225,45 +108,120 @@ export default function ProjectsPage() {
     return "bg-green-100"
   }
 
-  const handleCreateProject = () => {
+  // Calculate progress from task statuses
+  const calcProgress = (tasks: Task[]) => {
+    if (!tasks || tasks.length === 0) return 0
+    const done = tasks.filter((t) => t.status === "done").length
+    return Math.round((done / tasks.length) * 100)
+  }
+
+  const handleCreateProject = async () => {
     if (!form.name || !form.client || !form.manager) return
-    const newProject: Project = {
-      id: Date.now().toString(),
+    await insert({
       name: form.name,
       description: form.description,
       client: form.client,
       manager: form.manager,
       startDate: form.startDate || new Date().toISOString().split("T")[0],
-      endDate: form.endDate,
+      endDate: form.endDate || null,
       budget: parseFloat(form.budget) || 0,
       spent: 0,
       progress: 0,
-      status: "active",
-      tasks: [],
+      status: "active" as Project["status"],
+    })
+    if (user?.id && orgId) {
+      logAction({
+        action: "project.created",
+        module: "projects",
+        description: `Created project: ${form.name}`,
+        metadata: { name: form.name, client: form.client },
+        userId: user.id,
+        orgId,
+      })
     }
-    setProjects([...projects, newProject])
     setShowCreateDialog(false)
     setForm(emptyProjectForm)
   }
 
-  const handleAddTask = () => {
-    if (!selectedProject || !taskForm.name || !taskForm.assignee) return
-    const newTask: Task = {
-      id: `t${Date.now()}`,
-      name: taskForm.name,
+  const handleDeleteProject = async (project: Project) => {
+    if (!confirm(`Are you sure you want to delete "${project.name}"? All tasks will also be deleted.`)) return
+    await remove(project.id)
+    if (selectedProject?.id === project.id) setSelectedProject(null)
+    if (user?.id && orgId) {
+      logAction({
+        action: "project.deleted",
+        module: "projects",
+        description: `Deleted project: ${project.name}`,
+        metadata: { projectId: project.id, name: project.name },
+        userId: user.id,
+        orgId,
+      })
+    }
+  }
+
+  const handleAddTask = async () => {
+    if (!currentProject || !taskForm.title || !taskForm.assignee) return
+    await insertChildRows("tasks", [{
+      projectId: currentProject.id,
+      title: taskForm.title,
       assignee: taskForm.assignee,
       priority: taskForm.priority,
-      status: "pending",
-      dueDate: taskForm.dueDate || new Date().toISOString().split("T")[0],
+      status: "todo",
+      dueDate: taskForm.dueDate || null,
+    }])
+
+    // Refresh projects to get updated tasks
+    await refresh()
+
+    if (user?.id && orgId) {
+      logAction({
+        action: "task.created",
+        module: "projects",
+        description: `Added task "${taskForm.title}" to project "${currentProject.name}"`,
+        metadata: { projectId: currentProject.id, taskTitle: taskForm.title },
+        userId: user.id,
+        orgId,
+      })
     }
-    const updatedProject = {
-      ...selectedProject,
-      tasks: [...selectedProject.tasks, newTask],
-    }
-    setProjects(projects.map((p) => (p.id === selectedProject.id ? updatedProject : p)))
-    setSelectedProject(updatedProject)
     setTaskForm(emptyTaskForm)
     setShowTaskForm(false)
+  }
+
+  const handleTaskStatusChange = async (task: Task, newStatus: Task["status"]) => {
+    if (!currentProject) return
+    const supabase = createClient()
+    await supabase.from("tasks").update(toSnakeCase({ status: newStatus } as Record<string, unknown>)).eq("id", task.id)
+
+    // Recalculate progress
+    const updatedTasks = (currentProject.tasks || []).map((t) =>
+      t.id === task.id ? { ...t, status: newStatus } : t
+    )
+    const newProgress = calcProgress(updatedTasks)
+    await update(currentProject.id, { progress: newProgress })
+
+    // Refresh to get latest data
+    await refresh()
+  }
+
+  const handleDeleteTask = async (task: Task) => {
+    if (!currentProject) return
+    const supabase = createClient()
+    await supabase.from("tasks").delete().eq("id", task.id)
+
+    // Recalculate progress
+    const remainingTasks = (currentProject.tasks || []).filter((t) => t.id !== task.id)
+    const newProgress = calcProgress(remainingTasks)
+    await update(currentProject.id, { progress: newProgress })
+
+    await refresh()
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+      </div>
+    )
   }
 
   return (
@@ -284,7 +242,7 @@ export default function ProjectsPage() {
       </div>
 
       {/* Project Detail Panel */}
-      {selectedProject ? (
+      {currentProject ? (
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="p-6 border-b border-gray-100">
             <div className="flex items-center gap-4">
@@ -296,13 +254,20 @@ export default function ProjectsPage() {
               </button>
               <div className="flex-1">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-gray-900">{selectedProject.name}</h2>
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusColor(selectedProject.status)}`}>
-                    {selectedProject.status.replace("-", " ")}
+                  <h2 className="text-lg font-semibold text-gray-900">{currentProject.name}</h2>
+                  <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusColor(currentProject.status)}`}>
+                    {currentProject.status.replace("-", " ")}
                   </span>
                 </div>
-                <p className="text-sm text-gray-500 mt-1">{selectedProject.description}</p>
+                <p className="text-sm text-gray-500 mt-1">{currentProject.description}</p>
               </div>
+              <button
+                onClick={() => handleDeleteProject(currentProject)}
+                className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                title="Delete project"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
             </div>
           </div>
 
@@ -311,30 +276,32 @@ export default function ProjectsPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase mb-1">Client</p>
-                <p className="text-sm font-medium text-gray-900">{selectedProject.client}</p>
+                <p className="text-sm font-medium text-gray-900">{currentProject.client}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase mb-1">Manager</p>
-                <p className="text-sm font-medium text-gray-900">{selectedProject.manager}</p>
+                <p className="text-sm font-medium text-gray-900">{currentProject.manager}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase mb-1">Timeline</p>
-                <p className="text-sm text-gray-900">{formatDate(selectedProject.startDate)} - {formatDate(selectedProject.endDate)}</p>
+                <p className="text-sm text-gray-900">
+                  {currentProject.startDate ? formatDate(currentProject.startDate) : "—"} - {currentProject.endDate ? formatDate(currentProject.endDate) : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase mb-1">Budget</p>
-                <p className="text-sm font-medium text-gray-900">{formatCurrency(selectedProject.spent)} / {formatCurrency(selectedProject.budget)}</p>
+                <p className="text-sm font-medium text-gray-900">{formatCurrency(currentProject.spent ?? 0)} / {formatCurrency(currentProject.budget ?? 0)}</p>
               </div>
             </div>
             <div className="mt-4">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-medium text-gray-500">Progress</span>
-                <span className="text-xs font-medium text-gray-700">{selectedProject.progress}%</span>
+                <span className="text-xs font-medium text-gray-700">{currentProject.progress ?? 0}%</span>
               </div>
-              <div className={`w-full h-2 rounded-full ${getProgressBgColor(selectedProject.progress)}`}>
+              <div className={`w-full h-2 rounded-full ${getProgressBgColor(currentProject.progress ?? 0)}`}>
                 <div
-                  className={`h-2 rounded-full transition-all ${getProgressColor(selectedProject.progress)}`}
-                  style={{ width: `${selectedProject.progress}%` }}
+                  className={`h-2 rounded-full transition-all ${getProgressColor(currentProject.progress ?? 0)}`}
+                  style={{ width: `${currentProject.progress ?? 0}%` }}
                 />
               </div>
             </div>
@@ -343,7 +310,7 @@ export default function ProjectsPage() {
           {/* Task List */}
           <div className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-900">Tasks ({selectedProject.tasks.length})</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Tasks ({(currentProject.tasks || []).length})</h3>
               <button
                 onClick={() => setShowTaskForm(!showTaskForm)}
                 className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 font-medium"
@@ -359,10 +326,10 @@ export default function ProjectsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                   <input
                     type="text"
-                    value={taskForm.name}
-                    onChange={(e) => setTaskForm({ ...taskForm, name: e.target.value })}
+                    value={taskForm.title}
+                    onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
                     className="h-9 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
-                    placeholder="Task name"
+                    placeholder="Task title"
                   />
                   <input
                     type="text"
@@ -407,12 +374,13 @@ export default function ProjectsPage() {
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {selectedProject.tasks.map((task) => (
+                  {(currentProject.tasks || []).map((task) => (
                     <tr key={task.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{task.name}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{task.title}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{task.assignee}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${priorityColors[task.priority] || "bg-gray-100 text-gray-700"}`}>
@@ -420,13 +388,34 @@ export default function ProjectsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusColor(task.status)}`}>
-                          {task.status.replace("-", " ")}
-                        </span>
+                        <select
+                          value={task.status}
+                          onChange={(e) => handleTaskStatusChange(task, e.target.value as Task["status"])}
+                          className="text-xs rounded-lg border border-gray-200 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                          <option value="todo">To Do</option>
+                          <option value="in-progress">In Progress</option>
+                          <option value="done">Done</option>
+                        </select>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{formatDate(task.dueDate)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{task.dueDate ? formatDate(task.dueDate) : "—"}</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleDeleteTask(task)}
+                          className="p-1 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
+                  {(currentProject.tasks || []).length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
+                        No tasks yet. Click &quot;Add Task&quot; to get started.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -474,12 +463,12 @@ export default function ProjectsPage() {
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-gray-500">Progress</span>
-                    <span className="text-xs font-medium text-gray-700">{project.progress}%</span>
+                    <span className="text-xs font-medium text-gray-700">{project.progress ?? 0}%</span>
                   </div>
-                  <div className={`w-full h-2 rounded-full ${getProgressBgColor(project.progress)}`}>
+                  <div className={`w-full h-2 rounded-full ${getProgressBgColor(project.progress ?? 0)}`}>
                     <div
-                      className={`h-2 rounded-full transition-all ${getProgressColor(project.progress)}`}
-                      style={{ width: `${project.progress}%` }}
+                      className={`h-2 rounded-full transition-all ${getProgressColor(project.progress ?? 0)}`}
+                      style={{ width: `${project.progress ?? 0}%` }}
                     />
                   </div>
                 </div>
@@ -488,7 +477,7 @@ export default function ProjectsPage() {
                 <div className="flex items-center justify-between mb-3 text-xs">
                   <span className="text-gray-500">Budget</span>
                   <span className="font-medium text-gray-700">
-                    {formatCurrency(project.spent)} / {formatCurrency(project.budget)}
+                    {formatCurrency(project.spent ?? 0)} / {formatCurrency(project.budget ?? 0)}
                   </span>
                 </div>
 
@@ -500,19 +489,21 @@ export default function ProjectsPage() {
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
                     <Calendar className="h-3.5 w-3.5" />
-                    <span>{formatDate(project.startDate)}</span>
+                    <span>{project.startDate ? formatDate(project.startDate) : "—"}</span>
                   </div>
                 </div>
 
                 {/* Task Count */}
                 <div className="mt-2 text-xs text-gray-400">
-                  {project.tasks.length} task{project.tasks.length !== 1 ? "s" : ""} &middot; {project.tasks.filter((t) => t.status === "completed").length} completed
+                  {(project.tasks || []).length} task{(project.tasks || []).length !== 1 ? "s" : ""} &middot; {(project.tasks || []).filter((t) => t.status === "done").length} completed
                 </div>
               </div>
             ))}
             {filteredProjects.length === 0 && (
               <div className="col-span-full text-center py-12">
-                <p className="text-sm text-gray-500">No projects found in this category.</p>
+                <p className="text-sm text-gray-500">
+                  {projects.length === 0 ? "No projects yet. Click \"Add Project\" to get started." : "No projects found in this category."}
+                </p>
               </div>
             )}
           </div>

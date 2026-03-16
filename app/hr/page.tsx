@@ -4,7 +4,11 @@ import { PageGuard } from "@/components/shared/permission-guard"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
-import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
+import { useTableData } from "@/hooks/use-table-data"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
+import type { Employee } from "@/lib/types"
 import {
   Users,
   UserCheck,
@@ -13,6 +17,7 @@ import {
   X,
   Plus,
   Pencil,
+  Trash2,
   Calendar,
 } from "lucide-react"
 import { PageHeader } from "@/components/layout/page-header"
@@ -21,17 +26,7 @@ import { KpiCard } from "@/components/shared/kpi-card"
 import { formatCurrency, formatDate, getStatusColor } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
 
-interface Employee {
-  id: string
-  name: string
-  email: string
-  phone: string
-  department: string
-  position: string
-  salary: number
-  startDate: string
-  status: string
-}
+// ── Attendance & Leave types (no DB table yet — display-only mock data) ──
 
 interface AttendanceRecord {
   id: string
@@ -55,6 +50,8 @@ interface LeaveRecord {
   status: string
 }
 
+// ── Static constants ─────────────────────────────────────────
+
 const departments = [
   { name: "Engineering", manager: "James Wilson", count: 0 },
   { name: "Sales", manager: "Sarah Mitchell", count: 0 },
@@ -62,19 +59,6 @@ const departments = [
   { name: "Finance", manager: "Robert Taylor", count: 0 },
   { name: "HR", manager: "Maria Garcia", count: 0 },
   { name: "Operations", manager: "Kevin Brown", count: 0 },
-]
-
-const initialEmployees: Employee[] = [
-  { id: "1", name: "James Wilson", email: "james.wilson@company.com", phone: "(555) 101-0001", department: "Engineering", position: "Engineering Manager", salary: 125000, startDate: "2022-03-15", status: "active" },
-  { id: "2", name: "Sarah Mitchell", email: "sarah.mitchell@company.com", phone: "(555) 101-0002", department: "Sales", position: "Sales Director", salary: 115000, startDate: "2021-08-01", status: "active" },
-  { id: "3", name: "Laura Chen", email: "laura.chen@company.com", phone: "(555) 101-0003", department: "Marketing", position: "Marketing Manager", salary: 105000, startDate: "2022-01-10", status: "active" },
-  { id: "4", name: "Robert Taylor", email: "robert.taylor@company.com", phone: "(555) 101-0004", department: "Finance", position: "Finance Director", salary: 120000, startDate: "2020-06-20", status: "active" },
-  { id: "5", name: "Maria Garcia", email: "maria.garcia@company.com", phone: "(555) 101-0005", department: "HR", position: "HR Manager", salary: 98000, startDate: "2021-11-05", status: "active" },
-  { id: "6", name: "Kevin Brown", email: "kevin.brown@company.com", phone: "(555) 101-0006", department: "Operations", position: "Operations Manager", salary: 102000, startDate: "2022-07-18", status: "active" },
-  { id: "7", name: "Emily Zhang", email: "emily.zhang@company.com", phone: "(555) 101-0007", department: "Engineering", position: "Senior Developer", salary: 110000, startDate: "2023-02-01", status: "active" },
-  { id: "8", name: "David Kim", email: "david.kim@company.com", phone: "(555) 101-0008", department: "Sales", position: "Sales Representative", salary: 72000, startDate: "2023-05-15", status: "active" },
-  { id: "9", name: "Jessica Patel", email: "jessica.patel@company.com", phone: "(555) 101-0009", department: "Marketing", position: "Content Specialist", salary: 68000, startDate: "2023-09-10", status: "on-hold" },
-  { id: "10", name: "Michael Johnson", email: "michael.johnson@company.com", phone: "(555) 101-0010", department: "Engineering", position: "Junior Developer", salary: 75000, startDate: "2024-01-08", status: "active" },
 ]
 
 const initialAttendance: AttendanceRecord[] = [
@@ -100,7 +84,6 @@ const initialLeaves: LeaveRecord[] = [
   { id: "l7", employeeId: "3", employeeName: "Laura Chen", leaveType: "Vacation", startDate: "2025-03-24", endDate: "2025-03-28", days: 5, status: "pending" },
 ]
 
-const mainTabKeys = ["Employee Directory", "Departments", "Attendance", "Leave Management"] as const
 const deptColors: Record<string, string> = {
   Engineering: "bg-blue-100 text-blue-700",
   Sales: "bg-green-100 text-green-700",
@@ -123,7 +106,12 @@ const emptyEmployeeForm = {
 
 export default function HRPage() {
   const { t } = useI18n()
-  const [employees, setEmployees] = useLocalStorage<Employee[]>("erp-employees", initialEmployees)
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
+
+  // ── Data from normalized DB table ────────────────────────
+  const { data: employees, loading, insert, update, remove } = useTableData<Employee>("employees")
+
   const [search, setSearch] = useState("")
   const mainTabs = [
     t("hr.employeeDirectory"),
@@ -141,7 +129,7 @@ export default function HRPage() {
   const totalEmployees = employees.length
   const activeEmployees = employees.filter((e) => e.status === "active").length
   const deptCount = new Set(employees.map((e) => e.department)).size
-  const avgSalary = employees.reduce((sum, e) => sum + e.salary, 0) / employees.length
+  const avgSalary = employees.length > 0 ? employees.reduce((sum, e) => sum + e.salary, 0) / employees.length : 0
 
   // Compute department counts
   const deptCounts = employees.reduce((acc, e) => {
@@ -182,49 +170,68 @@ export default function HRPage() {
       department: employee.department,
       position: employee.position,
       salary: employee.salary.toString(),
-      startDate: employee.startDate,
+      startDate: employee.startDate || "",
       status: employee.status,
     })
     setShowDialog(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.name || !form.email || !form.position) return
 
+    const record = {
+      name: form.name,
+      email: form.email,
+      phone: form.phone,
+      department: form.department,
+      position: form.position,
+      salary: parseFloat(form.salary) || 0,
+      startDate: form.startDate || new Date().toISOString().split("T")[0],
+      status: form.status as Employee["status"],
+    }
+
     if (editingEmployee) {
-      setEmployees(
-        employees.map((e) =>
-          e.id === editingEmployee.id
-            ? {
-                ...e,
-                name: form.name,
-                email: form.email,
-                phone: form.phone,
-                department: form.department,
-                position: form.position,
-                salary: parseFloat(form.salary) || 0,
-                startDate: form.startDate,
-                status: form.status,
-              }
-            : e
-        )
-      )
-    } else {
-      const newEmployee: Employee = {
-        id: Date.now().toString(),
-        name: form.name,
-        email: form.email,
-        phone: form.phone,
-        department: form.department,
-        position: form.position,
-        salary: parseFloat(form.salary) || 0,
-        startDate: form.startDate || new Date().toISOString().split("T")[0],
-        status: form.status,
+      await update(editingEmployee.id, record)
+      if (user?.id && orgId) {
+        logAction({
+          action: "employee.updated",
+          module: "hr",
+          description: `Updated employee: ${form.name}`,
+          metadata: { employeeId: editingEmployee.id, name: form.name },
+          userId: user.id,
+          orgId,
+        })
       }
-      setEmployees([...employees, newEmployee])
+    } else {
+      await insert(record)
+      if (user?.id && orgId) {
+        logAction({
+          action: "employee.created",
+          module: "hr",
+          description: `Added new employee: ${form.name}`,
+          metadata: { name: form.name, department: form.department },
+          userId: user.id,
+          orgId,
+        })
+      }
     }
     setShowDialog(false)
     setEditingEmployee(null)
+  }
+
+  const handleDelete = async (employee: Employee) => {
+    if (!confirm(`Are you sure you want to delete "${employee.name}"?`)) return
+    await remove(employee.id)
+    if (user?.id && orgId) {
+      logAction({
+        action: "employee.deleted",
+        module: "hr",
+        description: `Deleted employee: ${employee.name}`,
+        metadata: { employeeId: employee.id, name: employee.name },
+        userId: user.id,
+        orgId,
+      })
+    }
   }
 
   const attendanceStatusColor = (status: string) => {
@@ -243,6 +250,14 @@ export default function HRPage() {
       case "rejected": return "bg-red-100 text-red-700"
       default: return "bg-gray-100 text-gray-700"
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+      </div>
+    )
   }
 
   return (
@@ -327,26 +342,38 @@ export default function HRPage() {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-600">{employee.position}</td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900 text-right">{formatCurrency(employee.salary)}</td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{formatDate(employee.startDate)}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500">{employee.startDate ? formatDate(employee.startDate) : "—"}</td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${getStatusColor(employee.status)}`}>
                           {employee.status.replace("-", " ")}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => openEditDialog(employee)}
-                          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEditDialog(employee)}
+                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(employee)}
+                            className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {filteredEmployees.length === 0 && (
                     <tr>
                       <td colSpan={8} className="px-6 py-12 text-center">
-                        <p className="text-sm text-gray-500">No employees found matching your search.</p>
+                        <p className="text-sm text-gray-500">
+                          {employees.length === 0
+                            ? "No employees yet. Click \"Add Employee\" to get started."
+                            : "No employees found matching your search."}
+                        </p>
                       </td>
                     </tr>
                   )}
@@ -586,7 +613,7 @@ export default function HRPage() {
                   className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
                 >
                   <option value="active">Active</option>
-                  <option value="on-hold">On Hold</option>
+                  <option value="on-leave">On Leave</option>
                   <option value="inactive">Inactive</option>
                 </select>
               </div>

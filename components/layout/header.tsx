@@ -1,11 +1,12 @@
 "use client"
 
-import { Bell, Search, Menu, User, LogOut } from "lucide-react"
+import { useState } from "react"
+import { Bell, Search, Menu, User, LogOut, Package } from "lucide-react"
 import { useAuth } from "@/lib/supabase/auth-context"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useSettings } from "@/hooks/use-settings"
+import { useTableData } from "@/hooks/use-table-data"
 import { OfflineIndicator } from "@/components/shared/offline-indicator"
-import type { Settings } from "@/lib/types"
-import { defaultSettings } from "@/lib/types"
+import type { InventoryItem } from "@/lib/types"
 
 interface HeaderProps {
   onMenuClick: () => void
@@ -13,7 +14,13 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { user, signOut } = useAuth()
-  const [settings] = useSupabaseData<Settings>("erp-settings", defaultSettings)
+  const [settings] = useSettings()
+  const { data: inventory } = useTableData<InventoryItem>("inventory")
+  const [showNotifications, setShowNotifications] = useState(false)
+
+  // Low-stock alerts
+  const lowStockItems = inventory.filter((item) => item.stock <= item.minStock)
+  const alertCount = lowStockItems.length
 
   const displayName =
     user?.user_metadata?.full_name ||
@@ -51,10 +58,50 @@ export function Header({ onMenuClick }: HeaderProps) {
       <div className="flex items-center gap-3">
         <OfflineIndicator />
 
-        <button className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors">
-          <Bell className="h-5 w-5 text-gray-500" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+        {/* Notification bell with real alerts */}
+        <div className="relative">
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <Bell className="h-5 w-5 text-gray-500" />
+            {alertCount > 0 && (
+              <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                {alertCount > 9 ? "9+" : alertCount}
+              </span>
+            )}
+          </button>
+
+          {/* Notification dropdown */}
+          {showNotifications && (
+            <div className="absolute right-0 top-full mt-2 w-80 rounded-xl border border-gray-200 bg-white shadow-lg z-50">
+              <div className="p-3 border-b border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                {lowStockItems.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-gray-500">
+                    No alerts at this time
+                  </div>
+                ) : (
+                  lowStockItems.slice(0, 10).map((item) => (
+                    <div key={item.id} className="flex items-start gap-3 p-3 hover:bg-gray-50 border-b border-gray-50 last:border-0">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 flex-shrink-0">
+                        <Package className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">Low Stock Alert</p>
+                        <p className="text-xs text-gray-500">
+                          Stock: {item.stock} (min: {item.minStock})
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
           <div className="hidden sm:block text-right">

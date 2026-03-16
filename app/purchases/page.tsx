@@ -5,15 +5,25 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
+import { useTableData, insertChildRows, deleteChildRows } from "@/hooks/use-table-data"
+import { useSettings } from "@/hooks/use-settings"
 import { PageHeader } from "@/components/layout/page-header"
-import { ClipboardList, Clock, DollarSign, PackageCheck, X, Eye, Trash2 } from "lucide-react"
-import { formatCurrency, formatDate, generateId } from "@/lib/utils"
-import type { PurchaseOrder, Supplier, Product, InventoryItem, SupplierDebt } from "@/lib/types"
+import { FormError } from "@/components/shared/form-error"
+import { validatePurchase, validatePayment } from "@/lib/validation"
+import { formatCurrency, formatDate } from "@/lib/utils"
+import type { PurchaseOrder, PurchaseItem, Supplier, Product, InventoryItem, SupplierDebt } from "@/lib/types"
+import {
+  ClipboardList, Clock, DollarSign, PackageCheck, X, Eye, Trash2,
+  Plus, Minus, CreditCard, AlertTriangle,
+} from "lucide-react"
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-700",
+    approved: "bg-blue-100 text-blue-700",
     received: "bg-green-100 text-green-700",
     cancelled: "bg-red-100 text-red-700",
   }
@@ -25,49 +35,104 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+interface FormItem {
+  productId: string
+  productName: string
+  quantity: string
+  unitCost: string
+}
+
 export default function PurchasesPage() {
   const { t } = useI18n()
-  const [orders, setOrders] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
-  const [suppliers] = useSupabaseData<Supplier[]>("erp-suppliers", [])
-  const [products] = useSupabaseData<Product[]>("erp-products", [])
-  const [debts, setDebts] = useSupabaseData<SupplierDebt[]>("erp-supplier-debts", [])
-  const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
+  const [settings] = useSettings()
+
+  const {
+    data: orders,
+    loading: ordersLoading,
+    insert: insertOrder,
+    update: updateOrder,
+    remove: removeOrder,
+    refresh: refreshOrders,
+  } = useTableData<PurchaseOrder>("purchase_orders", {
+    select: "*, purchase_items(*)",
+  })
+
+  const { data: suppliers } = useTableData<Supplier>("suppliers")
+  const { data: products } = useTableData<Product>("products")
+  const { data: inventory, update: updateInventory, insert: insertInventory } = useTableData<InventoryItem>("inventory")
+  const { insert: insertDebt, update: updateDebt } = useTableData<SupplierDebt>("supplier_debts", { manual: true })
 
   const [search, setSearch] = useState("")
   const [activeTab, setActiveTab] = useState("all")
   const [showNewOrder, setShowNewOrder] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<PurchaseOrder | null>(null)
+  const [showPayment, setShowPayment] = useState<PurchaseOrder | null>(null)
 
   // Form state
   const [formSupplierId, setFormSupplierId] = useState("")
-  const [formProductId, setFormProductId] = useState("")
-  const [formQty, setFormQty] = useState("10")
-  const [formUnitPrice, setFormUnitPrice] = useState("")
+  const [formItems, setFormItems] = useState<FormItem[]>([
+    { productId: "", productName: "", quantity: "1", unitCost: "" },
+  ])
   const [formAmountPaid, setFormAmountPaid] = useState("0")
   const [formExpectedDate, setFormExpectedDate] = useState("")
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+
+  // Payment form state
+  const [paymentAmount, setPaymentAmount] = useState("")
+  const [paymentNote, setPaymentNote] = useState("")
+  const [paymentError, setPaymentError] = useState("")
 
   const activeSuppliers = suppliers.filter((s) => s.status === "active")
   const activeProducts = products.filter((p) => p.status === "active")
 
-  const handleProductChange = (productId: string) => {
-    setFormProductId(productId)
-    const product = products.find((p) => p.id === productId)
-    if (product) setFormUnitPrice(String(product.cost))
+  // Build inventory lookup
+  const inventoryByProduct = new Map(inventory.map((i) => [i.productId, i]))
+
+  // ── Form item helpers ────────────────────────────────────
+  const updateItem = (idx: number, field: keyof FormItem, value: string) => {
+    setFormItems((prev) => prev.map((item, i) => {
+      if (i !== idx) return item
+      const updated = { ...item, [field]: value }
+      if (field === "productId") {
+        const prod = products.find((p) => p.id === value)
+        if (prod) {
+          updated.productName = prod.name
+          updated.unitCost = String(prod.cost)
+        }
+      }
+      return updated
+    }))
+    setFormErrors({})
   }
 
-  const formTotal = (parseFloat(formQty) || 0) * (parseFloat(formUnitPrice) || 0)
-  const formRemainingDebt = Math.max(0, formTotal - (parseFloat(formAmountPaid) || 0))
+  const addItem = () => {
+    setFormItems((prev) => [...prev, { productId: "", productName: "", quantity: "1", unitCost: "" }])
+  }
+
+  const removeItem = (idx: number) => {
+    if (formItems.length <= 1) return
+    setFormItems((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const formSubtotal = formItems.reduce(
+    (sum, item) => sum + (parseInt(item.quantity) || 0) * (parseFloat(item.unitCost) || 0),
+    0
+  )
+  const formPaid = parseFloat(formAmountPaid) || 0
+  const formRemainingDebt = Math.max(0, formSubtotal - formPaid)
 
   const resetForm = () => {
     setFormSupplierId("")
-    setFormProductId("")
-    setFormQty("10")
-    setFormUnitPrice("")
+    setFormItems([{ productId: "", productName: "", quantity: "1", unitCost: "" }])
     setFormAmountPaid("0")
     setFormExpectedDate("")
+    setFormErrors({})
   }
 
+  // ── Tabs & filtering ─────────────────────────────────────
   const tabs = [
     { id: "all", label: "All Orders" },
     { id: "pending", label: "Pending" },
@@ -78,114 +143,223 @@ export default function PurchasesPage() {
     activeTab === "all" ? orders : orders.filter((o) => o.status === activeTab)
   const filtered = tabFiltered.filter(
     (o) =>
-      (o.id ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (o.supplier ?? "").toLowerCase().includes(search.toLowerCase())
+      (o.poNumber ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (o.supplierName ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
+  // ── KPIs ─────────────────────────────────────────────────
   const totalOrders = orders.length
   const pendingCount = orders.filter((o) => o.status === "pending").length
-  const totalValue = orders.filter((o) => o.status !== "cancelled").reduce((s, o) => s + o.total, 0)
+  const totalValue = orders.filter((o) => o.status !== "cancelled").reduce((s, o) => s + (o.total ?? 0), 0)
   const receivedUnits = orders
     .filter((o) => o.status === "received")
-    .reduce((s, o) => s + (o.items ?? []).reduce((si, i) => si + (i?.qty ?? 0), 0), 0)
+    .reduce((s, o) => s + (o.items ?? []).reduce((si, i) => si + (i?.quantity ?? 0), 0), 0)
 
-  const handleDeleteOrder = (order: PurchaseOrder) => {
-    // Remove the order
-    setOrders(orders.filter((o) => o.id !== order.id))
-
-    // Reverse inventory: reduce stock by the quantities in this order
-    const today = new Date().toISOString().split("T")[0]
-    const items = order.items ?? []
-    if (items.length > 0) {
-      setInventory(
-        inventory.map((inv) => {
-          const orderedItem = items.find((item) => item.name === inv.productName)
-          if (orderedItem) {
-            return { ...inv, stock: Math.max(0, inv.stock - (orderedItem.qty ?? 0)), lastUpdated: today }
-          }
-          return inv
-        })
-      )
+  // ── Create order ─────────────────────────────────────────
+  const handleCreateOrder = async () => {
+    const validItems = formItems.filter((i) => i.productId && parseInt(i.quantity) > 0)
+    const validation = validatePurchase({
+      supplierId: formSupplierId,
+      items: validItems.map((i) => ({
+        productId: i.productId,
+        quantity: i.quantity,
+        unitCost: i.unitCost,
+      })),
+    })
+    if (!validation.valid) {
+      setFormErrors(validation.errors)
+      return
     }
 
-    // Remove the associated supplier debt entry
-    setDebts(debts.filter((d) => d.purchaseId !== order.id))
-
-    setDeleteConfirm(null)
-  }
-
-  const handleCreateOrder = () => {
-    if (!formSupplierId || !formProductId || !formQty || !formUnitPrice) return
     const supplier = suppliers.find((s) => s.id === formSupplierId)
-    const product = products.find((p) => p.id === formProductId)
-    if (!supplier || !product) return
+    if (!supplier) return
 
-    const qty = parseInt(formQty)
-    const unitPrice = parseFloat(formUnitPrice)
-    const total = qty * unitPrice
+    const subtotal = validItems.reduce(
+      (sum, i) => sum + (parseInt(i.quantity) || 0) * (parseFloat(i.unitCost) || 0),
+      0
+    )
     const paid = parseFloat(formAmountPaid) || 0
-    const remaining = Math.max(0, total - paid)
+    const remaining = Math.max(0, subtotal - paid)
     const today = new Date().toISOString().split("T")[0]
-    const poId = generateId("PO")
 
-    const newOrder: PurchaseOrder = {
-      id: poId,
+    // Generate PO number
+    const poPrefix = settings.poPrefix || "PO"
+    const nextNum = orders.length + 1
+    const poNumber = `${poPrefix}-${String(nextNum).padStart(4, "0")}`
+
+    const newOrder = await insertOrder({
+      poNumber,
       date: today,
-      supplier: supplier.name,
       supplierId: supplier.id,
-      items: [{ name: product.name, qty, cost: unitPrice }],
-      total,
+      supplierName: supplier.name,
+      subtotal,
+      tax: 0,
+      total: subtotal,
       status: "pending",
       expectedDate: formExpectedDate || today,
       amountPaid: paid,
       remainingDebt: remaining,
-    }
+    } as Partial<PurchaseOrder>)
 
-    setOrders([newOrder, ...orders])
+    if (!newOrder) return
 
-    // ── Update inventory stock ──────────────────────────────
-    const existingInv = inventory.find((i) => i.productId === product.id)
-    if (existingInv) {
-      setInventory(
-        inventory.map((i) =>
-          i.productId === product.id
-            ? { ...i, stock: i.stock + qty, lastUpdated: today }
-            : i
-        )
-      )
-    } else {
-      const newInvItem: InventoryItem = {
-        id: product.id,
-        productId: product.id,
-        productName: product.name,
-        category: product.category,
-        stock: qty,
-        minStock: 10,
-        lastUpdated: today,
+    // Insert purchase items
+    const itemRows = validItems.map((i) => ({
+      purchaseOrderId: newOrder.id,
+      productId: i.productId,
+      productName: i.productName || products.find((p) => p.id === i.productId)?.name || "Unknown",
+      quantity: parseInt(i.quantity),
+      unitCost: parseFloat(i.unitCost),
+      lineTotal: (parseInt(i.quantity) || 0) * (parseFloat(i.unitCost) || 0),
+    }))
+    await insertChildRows("purchase_items", itemRows)
+
+    // Update inventory: add stock for each item
+    for (const item of validItems) {
+      const qty = parseInt(item.quantity) || 0
+      const existing = inventoryByProduct.get(item.productId)
+      if (existing) {
+        await updateInventory(existing.id, { stock: existing.stock + qty, lastUpdated: today } as Partial<InventoryItem>)
+      } else {
+        await insertInventory({
+          productId: item.productId,
+          stock: qty,
+          minStock: 10,
+          lastUpdated: today,
+        } as Partial<InventoryItem>)
       }
-      setInventory([...inventory, newInvItem])
     }
 
-    // ── Auto-create debt if remaining balance ───────────────
+    // Auto-create supplier debt if remaining balance
     if (remaining > 0) {
-      const newDebt: SupplierDebt = {
-        id: generateId("DEBT"),
+      await insertDebt({
         supplierId: supplier.id,
         supplierName: supplier.name,
-        purchaseId: poId,
-        totalAmount: total,
+        purchaseOrderId: newOrder.id,
+        totalAmount: subtotal,
         amountPaid: paid,
         remainingDebt: remaining,
         status: paid > 0 ? "partial" : "outstanding",
-        payments: paid > 0 ? [{ date: today, amount: paid }] : [],
-        createdAt: today,
-      }
-      setDebts([newDebt, ...debts])
+      } as Partial<SupplierDebt>)
     }
 
+    // Audit log
+    if (user?.id && orgId) {
+      logAction({
+        action: "purchase.created",
+        module: "purchases",
+        description: `Created PO ${poNumber} from ${supplier.name} — ${formatCurrency(subtotal)}`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { poNumber, supplier: supplier.name, total: subtotal, items: validItems.length },
+      })
+    }
+
+    refreshOrders()
     setShowNewOrder(false)
     resetForm()
   }
+
+  // ── Delete order ─────────────────────────────────────────
+  const handleDeleteOrder = async (order: PurchaseOrder) => {
+    // Reverse inventory
+    const items = order.items ?? []
+    const today = new Date().toISOString().split("T")[0]
+    for (const item of items) {
+      const inv = inventoryByProduct.get(item.productId ?? "")
+      if (inv) {
+        const newStock = Math.max(0, inv.stock - (item.quantity ?? 0))
+        await updateInventory(inv.id, { stock: newStock, lastUpdated: today } as Partial<InventoryItem>)
+      }
+    }
+
+    // Delete purchase items
+    await deleteChildRows("purchase_items", "purchaseOrderId", order.id)
+    // Hard delete the order
+    await removeOrder(order.id, false)
+
+    // Audit log
+    if (user?.id && orgId) {
+      logAction({
+        action: "purchase.deleted",
+        module: "purchases",
+        description: `Deleted PO ${order.poNumber} from ${order.supplierName} — ${formatCurrency(order.total)}`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { poNumber: order.poNumber, supplier: order.supplierName, total: order.total },
+      })
+    }
+
+    refreshOrders()
+    setDeleteConfirm(null)
+  }
+
+  // ── Mark as Received ─────────────────────────────────────
+  const handleMarkReceived = async (order: PurchaseOrder) => {
+    const today = new Date().toISOString().split("T")[0]
+    await updateOrder(order.id, { status: "received", receivedDate: today } as Partial<PurchaseOrder>)
+
+    if (user?.id && orgId) {
+      logAction({
+        action: "purchase.received",
+        module: "purchases",
+        description: `Marked PO ${order.poNumber} as received`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { poNumber: order.poNumber, supplier: order.supplierName },
+      })
+    }
+
+    refreshOrders()
+    setSelectedOrder(null)
+  }
+
+  // ── Record Payment ───────────────────────────────────────
+  const handleRecordPayment = async () => {
+    if (!showPayment) return
+    const amount = parseFloat(paymentAmount) || 0
+    const maxPayable = showPayment.remainingDebt ?? 0
+
+    const validation = validatePayment({ amount, maxAmount: maxPayable })
+    if (!validation.valid) {
+      setPaymentError(validation.errors.amount ?? "Invalid payment")
+      return
+    }
+
+    const today = new Date().toISOString().split("T")[0]
+    const newPaid = (showPayment.amountPaid ?? 0) + amount
+    const newRemaining = Math.max(0, (showPayment.total ?? 0) - newPaid)
+
+    // Update PO
+    await updateOrder(showPayment.id, {
+      amountPaid: newPaid,
+      remainingDebt: newRemaining,
+    } as Partial<PurchaseOrder>)
+
+    // Audit log
+    if (user?.id && orgId) {
+      logAction({
+        action: "purchase.payment",
+        module: "purchases",
+        description: `Recorded payment of ${formatCurrency(amount)} on PO ${showPayment.poNumber}`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { poNumber: showPayment.poNumber, amount, newPaid, newRemaining },
+      })
+    }
+
+    refreshOrders()
+    setShowPayment(null)
+    setPaymentAmount("")
+    setPaymentNote("")
+    setPaymentError("")
+  }
+
+  const loading = ordersLoading
 
   return (
     <PageGuard permission={PERMISSIONS.PURCHASES_VIEW}>
@@ -249,7 +423,11 @@ export default function PurchasesPage() {
 
       {/* Table */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="py-16 text-center">
+            <p className="text-gray-400">Loading purchase orders...</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <ClipboardList className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 font-medium">{t("common.noData")}</p>
@@ -278,27 +456,36 @@ export default function PurchasesPage() {
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((o) => (
                   <tr key={o.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-mono font-medium text-gray-900">{o.id}</td>
+                    <td className="px-4 py-3 font-mono font-medium text-gray-900">{o.poNumber}</td>
                     <td className="px-4 py-3 text-gray-500">{formatDate(o.date)}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{o.supplier}</td>
-                    <td className="px-4 py-3 text-gray-500">{(o.items ?? []).reduce((s, i) => s + (i?.qty ?? 0), 0)} units</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">{o.supplierName}</td>
+                    <td className="px-4 py-3 text-gray-500">{(o.items ?? []).reduce((s, i) => s + (i?.quantity ?? 0), 0)} units</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(o.total)}</td>
-                    <td className="px-4 py-3 text-right text-green-600 font-medium">{formatCurrency(o.amountPaid || 0)}</td>
+                    <td className="px-4 py-3 text-right text-green-600 font-medium">{formatCurrency(o.amountPaid ?? 0)}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className={(o.remainingDebt || 0) > 0 ? "text-red-600 font-medium" : "text-green-600"}>
-                        {formatCurrency(o.remainingDebt || 0)}
+                      <span className={(o.remainingDebt ?? 0) > 0 ? "text-red-600 font-medium" : "text-green-600"}>
+                        {formatCurrency(o.remainingDebt ?? 0)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center"><StatusBadge status={o.status} /></td>
                     <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center gap-1">
                         <button
                           onClick={() => setSelectedOrder(o)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                          title={t("purchases.editPurchase")}
+                          title="View details"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
+                        {(o.remainingDebt ?? 0) > 0 && o.status !== "cancelled" && (
+                          <button
+                            onClick={() => { setShowPayment(o); setPaymentAmount(""); setPaymentNote(""); setPaymentError("") }}
+                            className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"
+                            title="Record payment"
+                          >
+                            <CreditCard className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeleteConfirm(o)}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"
@@ -324,19 +511,19 @@ export default function PurchasesPage() {
         >
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-lg font-bold text-gray-900">PO {selectedOrder.id}</h2>
+              <h2 className="text-lg font-bold text-gray-900">PO {selectedOrder.poNumber}</h2>
               <button onClick={() => setSelectedOrder(null)} className="p-1 hover:bg-gray-100 rounded">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-gray-500">Supplier:</span><p className="font-medium text-gray-900">{selectedOrder.supplier}</p></div>
+                <div><span className="text-gray-500">Supplier:</span><p className="font-medium text-gray-900">{selectedOrder.supplierName}</p></div>
                 <div><span className="text-gray-500">Status:</span><div className="mt-1"><StatusBadge status={selectedOrder.status} /></div></div>
                 <div><span className="text-gray-500">Order Date:</span><p className="font-medium">{formatDate(selectedOrder.date)}</p></div>
-                <div><span className="text-gray-500">Expected:</span><p className="font-medium">{formatDate(selectedOrder.expectedDate)}</p></div>
-                <div><span className="text-gray-500">Amount Paid:</span><p className="font-medium text-green-600">{formatCurrency(selectedOrder.amountPaid || 0)}</p></div>
-                <div><span className="text-gray-500">Remaining Debt:</span><p className={`font-medium ${(selectedOrder.remainingDebt || 0) > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(selectedOrder.remainingDebt || 0)}</p></div>
+                <div><span className="text-gray-500">Expected:</span><p className="font-medium">{selectedOrder.expectedDate ? formatDate(selectedOrder.expectedDate) : "—"}</p></div>
+                <div><span className="text-gray-500">Amount Paid:</span><p className="font-medium text-green-600">{formatCurrency(selectedOrder.amountPaid ?? 0)}</p></div>
+                <div><span className="text-gray-500">Remaining Debt:</span><p className={`font-medium ${(selectedOrder.remainingDebt ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(selectedOrder.remainingDebt ?? 0)}</p></div>
               </div>
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-3">Order Items</h4>
@@ -350,12 +537,12 @@ export default function PurchasesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedOrder.items.map((item, i) => (
-                      <tr key={i} className="border-b border-gray-100">
-                        <td className="py-2">{item.name}</td>
-                        <td className="text-right py-2">{item.qty}</td>
-                        <td className="text-right py-2">{formatCurrency(item.cost)}</td>
-                        <td className="text-right py-2 font-medium">{formatCurrency(item.qty * item.cost)}</td>
+                    {(selectedOrder.items ?? []).map((item, i) => (
+                      <tr key={item.id ?? i} className="border-b border-gray-100">
+                        <td className="py-2">{item.productName}</td>
+                        <td className="text-right py-2">{item.quantity}</td>
+                        <td className="text-right py-2">{formatCurrency(item.unitCost)}</td>
+                        <td className="text-right py-2 font-medium">{formatCurrency(item.lineTotal)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -366,6 +553,32 @@ export default function PurchasesPage() {
                     </tr>
                   </tfoot>
                 </table>
+              </div>
+
+              {/* Quick actions */}
+              <div className="flex gap-3 border-t pt-4">
+                {selectedOrder.status === "pending" && (
+                  <button
+                    onClick={() => handleMarkReceived(selectedOrder)}
+                    className="flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                  >
+                    Mark as Received
+                  </button>
+                )}
+                {(selectedOrder.remainingDebt ?? 0) > 0 && selectedOrder.status !== "cancelled" && (
+                  <button
+                    onClick={() => {
+                      setSelectedOrder(null)
+                      setShowPayment(selectedOrder)
+                      setPaymentAmount("")
+                      setPaymentNote("")
+                      setPaymentError("")
+                    }}
+                    className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    Record Payment
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -378,8 +591,8 @@ export default function PurchasesPage() {
           <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("purchases.deletePurchase")}</h3>
             <p className="text-sm text-gray-500 mb-1">
-              PO <span className="font-mono font-medium">{deleteConfirm.id}</span> from{" "}
-              <span className="font-medium">{deleteConfirm.supplier}</span>
+              PO <span className="font-mono font-medium">{deleteConfirm.poNumber}</span> from{" "}
+              <span className="font-medium">{deleteConfirm.supplierName}</span>
             </p>
             <p className="text-sm text-gray-500 mb-6">
               This will reverse the inventory stock and remove the associated supplier debt. This cannot be undone.
@@ -402,13 +615,78 @@ export default function PurchasesPage() {
         </div>
       )}
 
+      {/* ── Record Payment Modal ── */}
+      {showPayment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+              <h2 className="text-lg font-semibold text-gray-900">Record Payment</h2>
+              <button
+                onClick={() => { setShowPayment(null); setPaymentError("") }}
+                className="p-1 rounded-lg hover:bg-gray-100"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="font-medium text-gray-900">PO {showPayment.poNumber}</p>
+                <p className="text-sm text-gray-500 mt-0.5">{showPayment.supplierName}</p>
+                <div className="flex justify-between mt-2 text-sm">
+                  <span className="text-gray-500">Remaining:</span>
+                  <span className="font-semibold text-red-600">{formatCurrency(showPayment.remainingDebt ?? 0)}</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={showPayment.remainingDebt ?? 0}
+                  value={paymentAmount}
+                  onChange={(e) => { setPaymentAmount(e.target.value); setPaymentError("") }}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="0.00"
+                />
+                <FormError error={paymentError} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Note (optional)</label>
+                <input
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="e.g. Bank transfer #1234"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
+              <button
+                onClick={() => { setShowPayment(null); setPaymentError("") }}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={handleRecordPayment}
+                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                Record Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── New Purchase Order Dialog ── */}
       {showNewOrder && (
         <div
           className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
           onClick={() => setShowNewOrder(false)}
         >
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
               <h2 className="text-lg font-bold text-gray-900">{t("purchases.newPurchase")}</h2>
               <button onClick={() => setShowNewOrder(false)} className="p-1 hover:bg-gray-100 rounded">
@@ -421,17 +699,13 @@ export default function PurchasesPage() {
                   No active suppliers found. Add suppliers first.
                 </div>
               )}
-              {activeProducts.length === 0 && (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
-                  No active products found. Add products first.
-                </div>
-              )}
 
+              {/* Supplier selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.supplier")}</label>
                 <select
                   value={formSupplierId}
-                  onChange={(e) => setFormSupplierId(e.target.value)}
+                  onChange={(e) => { setFormSupplierId(e.target.value); setFormErrors({}) }}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select a supplier...</option>
@@ -439,49 +713,73 @@ export default function PurchasesPage() {
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
+                <FormError error={formErrors.supplier} />
               </div>
 
+              {/* Items */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.product")}</label>
-                <select
-                  value={formProductId}
-                  onChange={(e) => handleProductChange(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Select a product...</option>
-                  {activeProducts.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} (Cost: {formatCurrency(p.cost)})</option>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">Order Items</label>
+                  <button
+                    onClick={addItem}
+                    className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Item
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {formItems.map((item, idx) => (
+                    <div key={idx} className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <select
+                          value={item.productId}
+                          onChange={(e) => updateItem(idx, "productId", e.target.value)}
+                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="">Select product...</option>
+                          {activeProducts.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name} (Cost: {formatCurrency(p.cost)})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                        className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Qty"
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={item.unitCost}
+                        onChange={(e) => updateItem(idx, "unitCost", e.target.value)}
+                        className="w-28 rounded-lg border border-gray-200 px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Unit cost"
+                      />
+                      <span className="w-24 py-2 text-sm text-right font-medium text-gray-700">
+                        {formatCurrency((parseInt(item.quantity) || 0) * (parseFloat(item.unitCost) || 0))}
+                      </span>
+                      {formItems.length > 1 && (
+                        <button
+                          onClick={() => removeItem(idx)}
+                          className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
+                        >
+                          <Minus className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   ))}
-                </select>
+                </div>
+                <FormError error={formErrors.items} />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.quantity")}</label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={formQty}
-                    onChange={(e) => setFormQty(e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.unitCost")}</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formUnitPrice}
-                    onChange={(e) => setFormUnitPrice(e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
+              {/* Totals */}
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Order Total:</span>
-                  <span className="font-bold text-gray-900">{formatCurrency(formTotal)}</span>
+                  <span className="font-bold text-gray-900">{formatCurrency(formSubtotal)}</span>
                 </div>
               </div>
 
@@ -507,7 +805,7 @@ export default function PurchasesPage() {
 
               {formRemainingDebt > 0 && (
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <Clock className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-amber-700">
                     A supplier debt of {formatCurrency(formRemainingDebt)} will be automatically created for tracking.
                   </p>
@@ -533,7 +831,7 @@ export default function PurchasesPage() {
                 </button>
                 <button
                   onClick={handleCreateOrder}
-                  disabled={!formSupplierId || !formProductId || !formQty || !formUnitPrice || formTotal <= 0}
+                  disabled={!formSupplierId || formSubtotal <= 0}
                   className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {t("purchases.newPurchase")}

@@ -5,11 +5,16 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
+import { useTableData } from "@/hooks/use-table-data"
 import { PageHeader } from "@/components/layout/page-header"
-import { generateId, formatCurrency } from "@/lib/utils"
+import { FormError, FormWarning } from "@/components/shared/form-error"
+import { formatCurrency } from "@/lib/utils"
+import { validateProduct } from "@/lib/validation"
 import type { Product, InventoryItem } from "@/lib/types"
-import { Package, Tag, Edit2, Trash2, Plus, X } from "lucide-react"
+import { Package, Tag, Edit2, Trash2, Plus, X, Archive, RotateCcw } from "lucide-react"
 
 const DEFAULT_CATEGORIES = [
   "Electronics", "Clothing", "Food & Beverage", "Home & Garden",
@@ -27,37 +32,44 @@ const emptyForm = {
 
 export default function ProductsPage() {
   const { t } = useI18n()
-  const [products, setProducts] = useSupabaseData<Product[]>("erp-products", [])
-  const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
-  const [categories, setCategories] = useSupabaseData<string[]>(
-    "erp-categories",
-    DEFAULT_CATEGORIES
-  )
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
+
+  const [showArchived, setShowArchived] = useState(false)
+  const {
+    data: products,
+    loading: productsLoading,
+    insert: insertProduct,
+    update: updateProduct,
+    remove: removeProduct,
+    refresh: refreshProducts,
+  } = useTableData<Product>("products", {
+    includeDeleted: showArchived,
+    orderBy: { column: "name", ascending: true },
+  })
+
+  const {
+    data: inventoryItems,
+    loading: inventoryLoading,
+  } = useTableData<InventoryItem>("inventory")
 
   const [showModal, setShowModal] = useState(false)
-  const [showCatModal, setShowCatModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [form, setForm] = useState(emptyForm)
-  const [newCategory, setNewCategory] = useState("")
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [warnings, setWarnings] = useState<string[]>([])
   const [search, setSearch] = useState("")
   const [filterCat, setFilterCat] = useState("All")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
-  // Guard: Supabase data may not be a proper array (null, object, corrupted, etc.)
-  const safeProducts = (Array.isArray(products) ? products : []).filter(Boolean) as typeof products
-  const safeInventory = (Array.isArray(inventory) ? inventory : []).filter(Boolean) as typeof inventory
-  // Categories from Supabase may be old-format objects {id, name, color} — normalize to string[]
-  const rawCategories = Array.isArray(categories) ? categories : DEFAULT_CATEGORIES
-  const safeCategories = (rawCategories as unknown[])
-    .map((c) => {
-      if (typeof c === "string") return c
-      if (c && typeof c === "object" && "name" in (c as object)) return (c as { name: string }).name
-      return ""
-    })
-    .filter(Boolean) as string[]
+  // ── Derived data ──────────────────────────────────────────
+  const activeProducts = products.filter((p) => !p.deletedAt)
+  const displayProducts = showArchived ? products : activeProducts
 
-  // ── derived ────────────────────────────────────────────────
-  const filtered = safeProducts.filter((p) => {
+  const categories = [...new Set(activeProducts.map((p) => p.category).filter(Boolean))]
+  if (!categories.length) categories.push(...DEFAULT_CATEGORIES)
+
+  const filtered = displayProducts.filter((p) => {
     const matchesSearch =
       (p.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (p.category ?? "").toLowerCase().includes(search.toLowerCase())
@@ -65,10 +77,19 @@ export default function ProductsPage() {
     return matchesSearch && matchesCat
   })
 
-  // ── open modal ──────────────────────────────────────────────
+  const totalProducts = activeProducts.length
+  const activeCount = activeProducts.filter((p) => p.status === "active").length
+  const totalCategories = [...new Set(activeProducts.map((p) => p.category))].length
+  const lowStockCount = inventoryItems.filter(
+    (i) => (i.stock ?? 0) > 0 && (i.stock ?? 0) <= (i.minStock ?? 10)
+  ).length
+
+  // ── Modal helpers ─────────────────────────────────────────
   const openAdd = () => {
     setEditingProduct(null)
     setForm(emptyForm)
+    setErrors({})
+    setWarnings([])
     setShowModal(true)
   }
 
@@ -82,95 +103,109 @@ export default function ProductsPage() {
       cost: String(p.cost),
       status: p.status,
     })
+    setErrors({})
+    setWarnings([])
     setShowModal(true)
   }
 
-  // ── save ────────────────────────────────────────────────────
-  const handleSave = () => {
-    if (!form.name.trim() || !form.category) return
+  // ── Save (create or update) ───────────────────────────────
+  const handleSave = async () => {
+    // Validate
+    const existingNames = activeProducts
+      .filter((p) => p.id !== editingProduct?.id)
+      .map((p) => p.name)
+
+    const validation = validateProduct(form, existingNames)
+    setErrors(validation.errors)
+    setWarnings(validation.warnings)
+    if (!validation.valid) return
 
     const price = parseFloat(form.price) || 0
     const cost = parseFloat(form.cost) || 0
-    const today = new Date().toISOString().slice(0, 10)
 
     if (editingProduct) {
-      const updated: Product = {
-        ...editingProduct,
+      // Update existing product
+      await updateProduct(editingProduct.id, {
         name: form.name.trim(),
         category: form.category,
         description: (form.description ?? "").trim(),
         price,
         cost,
         status: form.status,
-      }
-      setProducts(safeProducts.map((p) => (p.id === editingProduct.id ? updated : p)))
-      // Sync name/category in inventory
-      setInventory(
-        safeInventory.map((i) =>
-          i.productId === editingProduct.id
-            ? { ...i, productName: updated.name, category: updated.category }
-            : i
-        )
-      )
-    } else {
-      const newProduct: Product = {
-        id: generateId(),
-        name: form.name.trim(),
-        category: form.category,
-        description: (form.description ?? "").trim(),
-        price,
-        cost,
-        status: form.status,
-        createdAt: today,
-      }
-      setProducts([...safeProducts, newProduct])
+      } as Partial<Product>)
 
-      // Auto-create inventory entry with stock = 0
-      const invEntry: InventoryItem = {
-        id: newProduct.id,
-        productId: newProduct.id,
-        productName: newProduct.name,
-        category: newProduct.category,
-        stock: 0,
-        minStock: 10,
-        lastUpdated: today,
+      if (user?.id && orgId) {
+        logAction({
+          action: "product.updated",
+          module: "products",
+          description: `Updated product "${form.name.trim()}" — price: ${price}, cost: ${cost}`,
+          userId: user.id,
+          orgId,
+          userName: user.email ?? undefined,
+          metadata: {
+            product_id: editingProduct.id,
+            previousValue: { name: editingProduct.name, price: editingProduct.price, cost: editingProduct.cost },
+            newValue: { name: form.name.trim(), price, cost },
+          },
+        })
       }
-      setInventory([...safeInventory, invEntry])
+    } else {
+      // Create new product (inventory entry auto-created by DB trigger)
+      const created = await insertProduct({
+        name: form.name.trim(),
+        category: form.category,
+        description: (form.description ?? "").trim(),
+        price,
+        cost,
+        status: form.status,
+      } as Partial<Product>)
+
+      if (created && user?.id && orgId) {
+        logAction({
+          action: "product.created",
+          module: "products",
+          description: `Created product "${form.name.trim()}" — price: ${price}, cost: ${cost}`,
+          userId: user.id,
+          orgId,
+          userName: user.email ?? undefined,
+          metadata: { product_id: created.id, price, cost },
+        })
+      }
     }
 
     setShowModal(false)
+    refreshProducts()
   }
 
-  // ── delete ──────────────────────────────────────────────────
-  const handleDelete = (id: string) => {
-    setProducts(safeProducts.filter((p) => p.id !== id))
-    setInventory(safeInventory.filter((i) => i.productId !== id))
+  // ── Delete (soft delete) ──────────────────────────────────
+  const handleDelete = async (id: string) => {
+    const product = products.find((p) => p.id === id)
+    await removeProduct(id, true) // soft delete
+
+    if (product && user?.id && orgId) {
+      logAction({
+        action: "product.deleted",
+        module: "products",
+        description: `Archived product "${product.name}"`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: { product_id: id, name: product.name, price: product.price },
+      })
+    }
     setDeleteConfirm(null)
   }
 
-  // ── categories ──────────────────────────────────────────────
-  const handleAddCategory = () => {
-    const trimmed = newCategory.trim()
-    if (trimmed && !safeCategories.includes(trimmed)) {
-      setCategories([...safeCategories, trimmed])
-    }
-    setNewCategory("")
+  // ── Restore (undo soft delete) ────────────────────────────
+  const handleRestore = async (id: string) => {
+    await updateProduct(id, { deletedAt: null } as Partial<Product>)
+    refreshProducts()
   }
-
-  const handleDeleteCategory = (cat: string) => {
-    const inUse = safeProducts.some((p) => p.category === cat)
-    if (!inUse) setCategories(safeCategories.filter((c) => c !== cat))
-  }
-
-  const totalProducts = safeProducts.length
-  const activeProducts = safeProducts.filter((p) => p.status === "active").length
-  const totalCategories = safeCategories.length
-  const lowStockCount = safeInventory.filter(
-    (i) => (i.stock ?? 0) > 0 && (i.stock ?? 0) <= (i.minStock ?? 10)
-  ).length
 
   const statusColor = (s: string) =>
     s === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+
+  const loading = productsLoading || inventoryLoading
 
   return (
     <PageGuard permission={PERMISSIONS.PRODUCTS_VIEW}>
@@ -185,7 +220,7 @@ export default function ProductsPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: t("products.totalProducts"), value: totalProducts, icon: Package, color: "text-indigo-600 bg-indigo-50" },
-          { label: t("products.activeProducts"), value: activeProducts, icon: Package, color: "text-green-600 bg-green-50" },
+          { label: t("products.activeProducts"), value: activeCount, icon: Package, color: "text-green-600 bg-green-50" },
           { label: t("products.categories"), value: totalCategories, icon: Tag, color: "text-purple-600 bg-purple-50" },
           { label: t("products.lowStock"), value: lowStockCount, icon: Package, color: lowStockCount > 0 ? "text-amber-600 bg-amber-50" : "text-gray-600 bg-gray-50" },
         ].map((kpi) => (
@@ -219,30 +254,38 @@ export default function ProductsPage() {
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value="All">All Categories</option>
-            {safeCategories.map((c) => (
+            {categories.map((c) => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>
           <button
-            onClick={() => setShowCatModal(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            onClick={() => setShowArchived(!showArchived)}
+            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+              showArchived
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-gray-200 text-gray-700 hover:bg-gray-50"
+            }`}
           >
-            <Tag className="h-4 w-4" />
-            {t("products.manageCategories")}
+            <Archive className="h-4 w-4" />
+            {showArchived ? "Hide Archived" : "Show Archived"}
           </button>
         </div>
       </div>
 
       {/* Products table */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="py-16 text-center">
+            <p className="text-gray-400">Loading products...</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <Package className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">
-              {safeProducts.length === 0 ? "Add your first product to get started" : "Try adjusting your search or filter"}
+              {activeProducts.length === 0 ? "Add your first product to get started" : "Try adjusting your search or filter"}
             </p>
-            {safeProducts.length === 0 && (
+            {activeProducts.length === 0 && (
               <button
                 onClick={openAdd}
                 className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
@@ -265,52 +308,72 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filtered.map((product) => (
-                  <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium text-gray-900">{product.name}</p>
-                        {product.description && (
-                          <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{product.description}</p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
-                        {product.category}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                      {formatCurrency(product.price ?? 0)}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-600">
-                      {formatCurrency(product.cost ?? 0)}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor(product.status ?? "active")}`}>
-                        {(product.status ?? "active") === "active" ? t("common.active") : t("common.inactive")}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => openEdit(product)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                          title={t("products.editProduct")}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirm(product.id)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          title={t("products.deleteProduct")}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((product) => {
+                  const isArchived = !!product.deletedAt
+                  return (
+                    <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${isArchived ? "opacity-60" : ""}`}>
+                      <td className="px-4 py-3">
+                        <div>
+                          <p className="font-medium text-gray-900">
+                            {product.name}
+                            {isArchived && (
+                              <span className="ml-2 text-xs text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">Archived</span>
+                            )}
+                          </p>
+                          {product.description && (
+                            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{product.description}</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                          {product.category}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                        {formatCurrency(product.price ?? 0)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-gray-600">
+                        {formatCurrency(product.cost ?? 0)}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor(product.status ?? "active")}`}>
+                          {(product.status ?? "active") === "active" ? t("common.active") : t("common.inactive")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
+                          {isArchived ? (
+                            <button
+                              onClick={() => handleRestore(product.id)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors"
+                              title="Restore product"
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => openEdit(product)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                                title={t("products.editProduct")}
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirm(product.id)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                title={t("products.deleteProduct")}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -330,52 +393,59 @@ export default function ProductsPage() {
               </button>
             </div>
             <div className="p-6 space-y-4">
+              {warnings.map((w, i) => (
+                <FormWarning key={i} message={w} />
+              ))}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.productName")} *</label>
                 <input
                   value={form.name ?? ""}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  onChange={(e) => { setForm({ ...form, name: e.target.value }); setErrors((prev) => ({ ...prev, name: "" })) }}
+                  className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.name ? "border-red-300" : "border-gray-200"}`}
                   placeholder="e.g. Wireless Headphones"
                 />
+                <FormError error={errors.name} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.category")} *</label>
                 <select
                   value={form.category}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  onChange={(e) => { setForm({ ...form, category: e.target.value }); setErrors((prev) => ({ ...prev, category: "" })) }}
+                  className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.category ? "border-red-300" : "border-gray-200"}`}
                 >
                   <option value="">Select category</option>
-                  {safeCategories.map((c) => (
+                  {[...new Set([...DEFAULT_CATEGORIES, ...categories])].map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
+                <FormError error={errors.category} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.sellingPrice")}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.sellingPrice")} *</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={form.price}
-                    onChange={(e) => setForm({ ...form, price: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(e) => { setForm({ ...form, price: e.target.value }); setErrors((prev) => ({ ...prev, price: "" })) }}
+                    className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.price ? "border-red-300" : "border-gray-200"}`}
                     placeholder="0.00"
                   />
+                  <FormError error={errors.price} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.costPrice")}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.costPrice")} *</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={form.cost}
-                    onChange={(e) => setForm({ ...form, cost: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(e) => { setForm({ ...form, cost: e.target.value }); setErrors((prev) => ({ ...prev, cost: "" })) }}
+                    className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.cost ? "border-red-300" : "border-gray-200"}`}
                     placeholder="0.00"
                   />
+                  <FormError error={errors.cost} />
                 </div>
               </div>
               <div>
@@ -409,8 +479,7 @@ export default function ProductsPage() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!form.name.trim() || !form.category}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
               >
                 {editingProduct ? t("common.save") : t("products.addProduct")}
               </button>
@@ -423,9 +492,9 @@ export default function ProductsPage() {
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("products.deleteProduct")}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Archive Product</h3>
             <p className="text-sm text-gray-500 mb-6">
-              {t("products.deleteConfirm")}
+              This product will be archived and hidden from active lists. It can be restored later. Historical records (sales, invoices) will be preserved.
             </p>
             <div className="flex gap-3">
               <button
@@ -436,59 +505,10 @@ export default function ProductsPage() {
               </button>
               <button
                 onClick={() => handleDelete(deleteConfirm)}
-                className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                className="flex-1 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
               >
-                {t("common.delete")}
+                Archive
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Categories Modal ── */}
-      {showCatModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">{t("products.categoriesTitle")}</h2>
-              <button onClick={() => setShowCatModal(false)} className="p-1 rounded-lg hover:bg-gray-100">
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="flex gap-2">
-                <input
-                  value={newCategory}
-                  onChange={(e) => setNewCategory(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAddCategory()}
-                  placeholder={t("products.categoryName")}
-                  className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <button
-                  onClick={handleAddCategory}
-                  className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {safeCategories.map((cat) => {
-                  const inUse = safeProducts.some((p) => p.category === cat)
-                  return (
-                    <div key={cat} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
-                      <span className="text-sm text-gray-700">{cat}</span>
-                      <button
-                        onClick={() => handleDeleteCategory(cat)}
-                        disabled={inUse}
-                        className="p-1 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
-                        title={inUse ? "Category is in use" : "Delete category"}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
             </div>
           </div>
         </div>

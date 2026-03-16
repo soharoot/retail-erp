@@ -5,53 +5,59 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useTableData } from "@/hooks/use-table-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency, formatDate, lastNMonths } from "@/lib/utils"
-import type { Sale, PurchaseOrder, SupplierDebt, Product } from "@/lib/types"
+import type { Sale, PurchaseOrder, SupplierDebt } from "@/lib/types"
 import { DollarSign, TrendingUp, TrendingDown, Landmark, BarChart3 } from "lucide-react"
 
 export default function FinancialPage() {
   const { t } = useI18n()
-  const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
-  const [purchases] = useSupabaseData<PurchaseOrder[]>("erp-purchases", [])
-  const [debts] = useSupabaseData<SupplierDebt[]>("erp-supplier-debts", [])
-  const [products] = useSupabaseData<Product[]>("erp-products", [])
+
+  const { data: sales } = useTableData<Sale>("sales", { select: "*, sale_items(*)" })
+  const { data: purchases } = useTableData<PurchaseOrder>("purchase_orders")
+  const { data: debts } = useTableData<SupplierDebt>("supplier_debts")
 
   const [activeTab, setActiveTab] = useState("pnl")
 
   // ── Real KPI Calculations ────────────────────────────────────
   const completedSales = sales.filter((s) => s.status === "completed")
-  const revenue = completedSales.reduce((sum, s) => sum + s.total, 0)
+  const revenue = completedSales.reduce((sum, s) => sum + (s.total ?? 0), 0)
 
   const cogs = completedSales
     .flatMap((s) => s.items ?? [])
-    .reduce((sum, item) => sum + (item?.qty ?? 0) * (item?.costAtSale ?? 0), 0)
+    .reduce((sum, item) => sum + (item?.quantity ?? 0) * (item?.costAtSale ?? 0), 0)
 
   const grossProfit = revenue - cogs
   const grossMargin = revenue > 0 ? Math.round((grossProfit / revenue) * 100) : 0
 
   const outstandingDebt = debts
     .filter((d) => d.status !== "paid")
-    .reduce((sum, d) => sum + d.remainingDebt, 0)
+    .reduce((sum, d) => sum + (d.remainingDebt ?? 0), 0)
 
   const totalPurchases = purchases
     .filter((p) => p.status !== "cancelled")
-    .reduce((sum, p) => sum + p.total, 0)
+    .reduce((sum, p) => sum + (p.total ?? 0), 0)
 
   const totalPaid = purchases
     .filter((p) => p.status !== "cancelled")
-    .reduce((sum, p) => sum + (p.amountPaid || 0), 0)
+    .reduce((sum, p) => sum + (p.amountPaid ?? 0), 0)
+
+  // Cash flow: Cash IN = completed sales, Cash OUT = payments made to suppliers
+  const cashIn = revenue
+  const cashOut = totalPaid
+  const netCashFlow = cashIn - cashOut
 
   // ── Monthly P&L chart — single pass over completedSales ─────
   const months = lastNMonths(6)
   const monthlyPnl = new Map<string, { revenue: number; cogs: number }>()
   for (const sale of completedSales) {
-    const k = sale.date.slice(0, 7)
+    const k = (sale.date ?? "").slice(0, 7)
+    if (!k) continue
     const entry = monthlyPnl.get(k) ?? { revenue: 0, cogs: 0 }
-    entry.revenue += sale.total
+    entry.revenue += sale.total ?? 0
     entry.cogs += (sale.items ?? []).reduce(
-      (s, item) => s + (item?.qty ?? 0) * (item?.costAtSale ?? 0),
+      (s, item) => s + (item?.quantity ?? 0) * (item?.costAtSale ?? 0),
       0
     )
     monthlyPnl.set(k, entry)
@@ -128,7 +134,7 @@ export default function FinancialPage() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
           { label: t("financial.cogs"), value: formatCurrency(cogs), sub: "Cost of goods sold" },
-          { label: t("financial.cashFlow"), value: formatCurrency(totalPaid), sub: "Total payments made" },
+          { label: t("financial.cashFlow"), value: formatCurrency(netCashFlow), sub: `In: ${formatCurrency(cashIn)} / Out: ${formatCurrency(cashOut)}` },
           { label: t("financial.accountsPayable"), value: formatCurrency(outstandingDebt), sub: "Still owed to suppliers" },
         ].map((item) => (
           <div key={item.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -251,7 +257,7 @@ export default function FinancialPage() {
                   {unpaidDebts.map((debt) => (
                     <tr key={debt.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-medium text-gray-900">{debt.supplierName}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-gray-500">{debt.purchaseId}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-gray-500">{debt.purchaseOrderId ?? "—"}</td>
                       <td className="px-4 py-3 text-right text-gray-900">{formatCurrency(debt.totalAmount)}</td>
                       <td className="px-4 py-3 text-right text-green-600">{formatCurrency(debt.amountPaid)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-red-600">{formatCurrency(debt.remainingDebt)}</td>
@@ -303,14 +309,14 @@ export default function FinancialPage() {
                 <tbody className="divide-y divide-gray-100">
                   {purchases.map((po) => (
                     <tr key={po.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-mono text-xs font-medium text-gray-900">{po.id}</td>
-                      <td className="px-4 py-3 text-gray-900">{po.supplier}</td>
+                      <td className="px-4 py-3 font-mono text-xs font-medium text-gray-900">{po.poNumber}</td>
+                      <td className="px-4 py-3 text-gray-900">{po.supplierName}</td>
                       <td className="px-4 py-3 text-gray-500">{formatDate(po.date)}</td>
                       <td className="px-4 py-3 text-right font-medium text-gray-900">{formatCurrency(po.total)}</td>
-                      <td className="px-4 py-3 text-right text-green-600">{formatCurrency(po.amountPaid || 0)}</td>
+                      <td className="px-4 py-3 text-right text-green-600">{formatCurrency(po.amountPaid ?? 0)}</td>
                       <td className="px-4 py-3 text-right">
-                        <span className={(po.remainingDebt || 0) > 0 ? "text-red-600 font-medium" : "text-green-600"}>
-                          {formatCurrency(po.remainingDebt || 0)}
+                        <span className={(po.remainingDebt ?? 0) > 0 ? "text-red-600 font-medium" : "text-green-600"}>
+                          {formatCurrency(po.remainingDebt ?? 0)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">

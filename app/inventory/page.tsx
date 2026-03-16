@@ -8,8 +8,10 @@ import { useI18n } from "@/lib/i18n/context"
 import { useAuth } from "@/lib/supabase/auth-context"
 import { useRBAC } from "@/lib/rbac/rbac-context"
 import { logAction } from "@/lib/activity/log-action"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useTableData } from "@/hooks/use-table-data"
 import { PageHeader } from "@/components/layout/page-header"
+import { FormError } from "@/components/shared/form-error"
+import { validateStockAdjustment } from "@/lib/validation"
 import { formatCurrency } from "@/lib/utils"
 import type { InventoryItem, Product } from "@/lib/types"
 import { Warehouse, AlertTriangle, X, TrendingUp, TrendingDown } from "lucide-react"
@@ -24,14 +26,36 @@ export default function InventoryPage() {
   const { t } = useI18n()
   const { user } = useAuth()
   const { orgId } = useRBAC()
-  const [inventory, setInventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
-  const [products] = useSupabaseData<Product[]>("erp-products", [])
+
+  const {
+    data: inventory,
+    loading: inventoryLoading,
+    update: updateInventory,
+    refresh: refreshInventory,
+  } = useTableData<InventoryItem>("inventory")
+
+  const { data: products, loading: productsLoading } = useTableData<Product>("products")
 
   const [search, setSearch] = useState("")
-  const [filterStatus, setFilterStatus] = useState(() => "")
+  const [filterStatus, setFilterStatus] = useState("")
   const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null)
   const [adjustAmount, setAdjustAmount] = useState("")
   const [adjustReason, setAdjustReason] = useState("")
+  const [adjustError, setAdjustError] = useState("")
+
+  // ── Build product lookup map ──────────────────────────────
+  const productMap = new Map(products.map((p) => [p.id, p]))
+
+  // Enrich inventory items with product data
+  const enrichedInventory = inventory.map((item) => {
+    const prod = productMap.get(item.productId)
+    return {
+      ...item,
+      productName: prod?.name ?? "Unknown Product",
+      category: prod?.category ?? "",
+      cost: prod?.cost ?? 0,
+    }
+  })
 
   // ── derived ────────────────────────────────────────────────
   const stockLabels = {
@@ -40,10 +64,10 @@ export default function InventoryPage() {
     inStock: t("inventory.inStock"),
   }
 
-  const filtered = inventory.filter((item) => {
+  const filtered = enrichedInventory.filter((item) => {
     const matchesSearch =
-      (item.productName ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (item.category ?? "").toLowerCase().includes(search.toLowerCase())
+      item.productName.toLowerCase().includes(search.toLowerCase()) ||
+      item.category.toLowerCase().includes(search.toLowerCase())
     if (!matchesSearch) return false
     if (!filterStatus || filterStatus === t("common.all")) return true
     const { label } = stockStatus(item.stock, item.minStock, stockLabels)
@@ -51,43 +75,49 @@ export default function InventoryPage() {
   })
 
   const totalItems = inventory.length
-  const totalUnits = inventory.reduce((s, i) => s + i.stock, 0)
-  const lowStockCount = inventory.filter((i) => i.stock > 0 && i.stock <= i.minStock).length
-  const outOfStockCount = inventory.filter((i) => i.stock === 0).length
+  const totalUnits = inventory.reduce((s, i) => s + (i.stock ?? 0), 0)
+  const lowStockCount = inventory.filter((i) => (i.stock ?? 0) > 0 && (i.stock ?? 0) <= (i.minStock ?? 10)).length
+  const outOfStockCount = inventory.filter((i) => (i.stock ?? 0) === 0).length
 
-  // Inventory value = Σ stock × product.cost
-  const inventoryValue = inventory.reduce((sum, item) => {
-    const prod = products.find((p) => p.id === item.productId)
-    return sum + item.stock * (prod?.cost ?? 0)
-  }, 0)
+  const inventoryValue = enrichedInventory.reduce(
+    (sum, item) => sum + (item.stock ?? 0) * item.cost,
+    0
+  )
+
+  const loading = inventoryLoading || productsLoading
 
   // ── adjust stock ────────────────────────────────────────────
-  const handleAdjust = () => {
+  const handleAdjust = async () => {
     if (!adjustItem) return
     const delta = parseInt(adjustAmount) || 0
-    const today = new Date().toISOString().slice(0, 10)
-    const newStock = Math.max(0, adjustItem.stock + delta)
-    setInventory(
-      inventory.map((i) =>
-        i.id === adjustItem.id
-          ? { ...i, stock: newStock, lastUpdated: today }
-          : i
-      )
-    )
+
+    const validation = validateStockAdjustment(delta, adjustItem.stock)
+    if (!validation.valid) {
+      setAdjustError(validation.errors.adjustment ?? "Invalid adjustment")
+      return
+    }
+
+    const newStock = adjustItem.stock + delta
+    await updateInventory(adjustItem.id, { stock: newStock } as Partial<InventoryItem>)
+
+    const prod = productMap.get(adjustItem.productId)
     if (user?.id && orgId) {
       logAction({
         action: "inventory.adjusted",
         module: "inventory",
-        description: `Adjusted stock of "${adjustItem.productName}": ${adjustItem.stock} → ${newStock} (${delta > 0 ? "+" : ""}${delta})${adjustReason ? ` — ${adjustReason}` : ""}`,
+        description: `Adjusted stock of "${prod?.name ?? "Unknown"}": ${adjustItem.stock} → ${newStock} (${delta > 0 ? "+" : ""}${delta})${adjustReason ? ` — ${adjustReason}` : ""}`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
-        metadata: { product: adjustItem.productName, old_stock: adjustItem.stock, new_stock: newStock, delta, reason: adjustReason },
+        metadata: { product: prod?.name, product_id: adjustItem.productId, old_stock: adjustItem.stock, new_stock: newStock, delta, reason: adjustReason },
       })
     }
+
+    refreshInventory()
     setAdjustItem(null)
     setAdjustAmount("")
     setAdjustReason("")
+    setAdjustError("")
   }
 
   return (
@@ -145,7 +175,11 @@ export default function InventoryPage() {
 
       {/* Inventory table */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="py-16 text-center">
+            <p className="text-gray-400">Loading inventory...</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <Warehouse className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 font-medium">{t("common.noData")}</p>
@@ -184,9 +218,11 @@ export default function InventoryPage() {
                         <p className="font-medium text-gray-900">{item.productName}</p>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
-                          {item.category}
-                        </span>
+                        {item.category && (
+                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                            {item.category}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1">
@@ -200,10 +236,12 @@ export default function InventoryPage() {
                       <td className="px-4 py-3 text-center">
                         <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${color}`}>{label}</span>
                       </td>
-                      <td className="px-4 py-3 text-center text-gray-500 text-xs">{item.lastUpdated || "—"}</td>
+                      <td className="px-4 py-3 text-center text-gray-500 text-xs">
+                        {item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString() : "—"}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <button
-                          onClick={() => setAdjustItem(item)}
+                          onClick={() => { setAdjustItem(item); setAdjustError("") }}
                           className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
                         >
                           {t("inventory.adjustStock")}
@@ -225,7 +263,7 @@ export default function InventoryPage() {
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-lg font-semibold text-gray-900">{t("inventory.adjustStock")}</h2>
               <button
-                onClick={() => { setAdjustItem(null); setAdjustAmount(""); setAdjustReason("") }}
+                onClick={() => { setAdjustItem(null); setAdjustAmount(""); setAdjustReason(""); setAdjustError("") }}
                 className="p-1 rounded-lg hover:bg-gray-100"
               >
                 <X className="h-5 w-5 text-gray-500" />
@@ -233,14 +271,16 @@ export default function InventoryPage() {
             </div>
             <div className="p-6 space-y-4">
               <div className="rounded-lg bg-gray-50 p-3">
-                <p className="font-medium text-gray-900">{adjustItem.productName}</p>
+                <p className="font-medium text-gray-900">
+                  {productMap.get(adjustItem.productId)?.name ?? "Unknown Product"}
+                </p>
                 <p className="text-sm text-gray-500 mt-0.5">Current stock: <strong>{adjustItem.stock}</strong></p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   {t("inventory.adjustmentAmount")}
                 </label>
-                <p className="text-xs text-gray-400 mb-2">Use positive (+) to add stock, negative (−) to remove</p>
+                <p className="text-xs text-gray-400 mb-2">Use positive (+) to add stock, negative (-) to remove</p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setAdjustAmount(String((parseInt(adjustAmount) || 0) - 1))}
@@ -251,7 +291,7 @@ export default function InventoryPage() {
                   <input
                     type="number"
                     value={adjustAmount}
-                    onChange={(e) => setAdjustAmount(e.target.value)}
+                    onChange={(e) => { setAdjustAmount(e.target.value); setAdjustError("") }}
                     className="flex-1 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-center font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     placeholder="0"
                   />
@@ -262,11 +302,12 @@ export default function InventoryPage() {
                     <TrendingUp className="h-4 w-4" />
                   </button>
                 </div>
-                {adjustAmount && (
+                {adjustAmount && !adjustError && (
                   <p className="text-xs text-indigo-600 mt-1.5">
                     New stock: {Math.max(0, adjustItem.stock + (parseInt(adjustAmount) || 0))}
                   </p>
                 )}
+                <FormError error={adjustError} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("inventory.adjustmentReason")}</label>
@@ -280,7 +321,7 @@ export default function InventoryPage() {
             </div>
             <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
               <button
-                onClick={() => { setAdjustItem(null); setAdjustAmount(""); setAdjustReason("") }}
+                onClick={() => { setAdjustItem(null); setAdjustAmount(""); setAdjustReason(""); setAdjustError("") }}
                 className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 {t("common.cancel")}

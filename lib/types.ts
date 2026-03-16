@@ -1,96 +1,256 @@
 // ============================================================
 // Centralized ERP type definitions
 // All ERP modules import their core types from here.
+// Types match the normalized database schema (006_normalize_business_data.sql)
+// DB uses snake_case; TypeScript uses camelCase.
 // ============================================================
+
+// ── Products & Inventory ────────────────────────────────────
 
 export interface Product {
   id: string
+  orgId: string
   name: string
+  sku?: string
   category: string
   description: string
   price: number   // selling price
   cost: number    // purchase / cost price
   status: "active" | "inactive"
+  deletedAt?: string | null
   createdAt: string
+  updatedAt: string
 }
 
 export interface InventoryItem {
   id: string
+  orgId: string
   productId: string
-  productName: string
-  category: string
   stock: number
   minStock: number
   lastUpdated: string
+  // Joined fields (from product)
+  product?: Product
 }
 
+// ── Sales ────────────────────────────────────────────────────
+
 export interface SaleItem {
-  name: string
-  qty: number
-  price: number
+  id: string
+  saleId: string
+  productId?: string | null
+  productName: string
+  quantity: number
+  unitPrice: number
   costAtSale: number  // product.cost captured at time of sale for COGS
+  lineTotal: number
 }
 
 export interface Sale {
   id: string
+  orgId: string
+  saleNumber: string
   date: string
-  customer: string
-  items: SaleItem[]
+  customerId?: string | null
+  customerName: string
+  subtotal: number
+  tax: number
   total: number
-  payment: "cash" | "card" | "transfer" | "check"
+  paymentMethod: "cash" | "card" | "transfer" | "check"
   status: "completed" | "pending" | "cancelled" | "refunded"
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+  // Nested relation
+  items: SaleItem[]
 }
 
+// ── Purchases ────────────────────────────────────────────────
+
 export interface PurchaseItem {
-  name: string
-  qty: number
-  cost: number
+  id: string
+  purchaseOrderId: string
+  productId?: string | null
+  productName: string
+  quantity: number
+  unitCost: number
+  lineTotal: number
 }
 
 export interface PurchaseOrder {
   id: string
+  orgId: string
+  poNumber: string
   date: string
-  supplier: string
-  supplierId: string
-  items: PurchaseItem[]
+  supplierId?: string | null
+  supplierName: string
+  subtotal: number
+  tax: number
   total: number
-  status: "pending" | "received" | "cancelled"
-  expectedDate: string
+  status: "pending" | "approved" | "received" | "cancelled"
+  expectedDate?: string | null
+  receivedDate?: string | null
   amountPaid: number
   remainingDebt: number
+  createdBy?: string
+  createdAt: string
+  updatedAt: string
+  // Nested relation
+  items: PurchaseItem[]
 }
+
+// ── Suppliers ────────────────────────────────────────────────
 
 export interface Supplier {
   id: string
+  orgId: string
   name: string
   contactPerson: string
   email: string
   phone: string
   address: string
-  orders: number
-  totalSpent: number
   status: "active" | "inactive"
+  deletedAt?: string | null
+  createdAt: string
+  updatedAt: string
 }
 
+// ── Customers ────────────────────────────────────────────────
+
+export interface Customer {
+  id: string
+  orgId: string
+  name: string
+  email: string
+  phone: string
+  company: string
+  address: string
+  segment: "VIP" | "Regular" | "New"
+  status: "active" | "inactive"
+  deletedAt?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// ── Supplier Debts & Payments ────────────────────────────────
+
 export interface DebtPayment {
-  date: string
+  id: string
+  debtId: string
   amount: number
+  date: string
+  note: string
+  createdAt: string
 }
 
 export interface SupplierDebt {
   id: string
-  supplierId: string
+  orgId: string
+  supplierId?: string | null
   supplierName: string
-  purchaseId: string
+  purchaseOrderId?: string | null
   totalAmount: number
   amountPaid: number
   remainingDebt: number
   status: "outstanding" | "partial" | "paid"
+  createdAt: string
+  updatedAt: string
+  // Nested relation
   payments: DebtPayment[]
+}
+
+// ── HR ───────────────────────────────────────────────────────
+
+export interface Employee {
+  id: string
+  orgId: string
+  name: string
+  email: string
+  phone: string
+  department: string
+  position: string
+  salary: number
+  startDate?: string | null
+  status: "active" | "on-leave" | "inactive"
   createdAt: string
 }
 
+export interface Attendance {
+  id: string
+  employeeId: string
+  employeeName: string
+  date: string
+  checkIn: string
+  checkOut: string
+  status: "present" | "absent" | "late" | "half-day"
+}
+
+// ── CRM ──────────────────────────────────────────────────────
+
+export interface Lead {
+  id: string
+  orgId: string
+  name: string
+  company: string
+  email: string
+  phone: string
+  value: number
+  source: string
+  stage: "new" | "qualified" | "proposal" | "negotiation" | "won" | "lost"
+  assignedTo: string
+  lastContact?: string | null
+  createdAt: string
+}
+
+// ── Projects & Tasks ─────────────────────────────────────────
+
+export interface Task {
+  id: string
+  projectId: string
+  title: string
+  assignee: string
+  status: "todo" | "in-progress" | "done"
+  priority: "low" | "medium" | "high"
+  dueDate?: string | null
+  createdAt: string
+}
+
+export interface Project {
+  id: string
+  orgId: string
+  name: string
+  description: string
+  client: string
+  manager: string
+  startDate?: string | null
+  endDate?: string | null
+  budget: number
+  spent: number
+  status: "active" | "completed" | "on-hold" | "cancelled"
+  progress: number
+  createdAt: string
+  // Nested relation
+  tasks: Task[]
+}
+
+// ── Expenses ─────────────────────────────────────────────────
+
+export interface Expense {
+  id: string
+  orgId: string
+  date: string
+  category: string
+  description: string
+  amount: number
+  vendor: string
+  status: "pending" | "approved" | "rejected"
+  createdAt: string
+}
+
+// ── Settings ─────────────────────────────────────────────────
+
 export interface Settings {
+  orgId: string
   companyName: string
   address: string
   phone: string
@@ -98,21 +258,47 @@ export interface Settings {
   website: string
   taxId: string
   currency: string
-  taxRate: string
+  taxRate: number
   dateFormat: string
   timezone: string
   language: string
+  invoicePrefix: string
+  poPrefix: string
   emailNotifications: boolean
   lowStockAlerts: boolean
   orderNotifications: boolean
   reportEmails: boolean
-  invoicePrefix: string
-  poPrefix: string
   autoBackup: boolean
   twoFactor: boolean
+  updatedAt: string
 }
 
-// ── User Preferences (per-user, not org-wide) ─────────────────
+export const defaultSettings: Settings = {
+  orgId: "",
+  companyName: "My Company",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  taxId: "",
+  currency: "USD",
+  taxRate: 0,
+  dateFormat: "MM/DD/YYYY",
+  timezone: "UTC",
+  language: "en",
+  invoicePrefix: "INV",
+  poPrefix: "PO",
+  emailNotifications: true,
+  lowStockAlerts: true,
+  orderNotifications: true,
+  reportEmails: false,
+  autoBackup: false,
+  twoFactor: false,
+  updatedAt: "",
+}
+
+// ── User Preferences (per-user, not org-wide) ───────────────
+
 export interface UserPreferences {
   theme: "light" | "dark" | "system"
   interfaceStyle: "default" | "compact" | "comfortable"
@@ -125,24 +311,23 @@ export const defaultUserPreferences: UserPreferences = {
   dashboardLayout: "grid",
 }
 
-export const defaultSettings: Settings = {
-  companyName: "Retail ERP Corp",
-  address: "123 Business Avenue, Suite 100",
-  phone: "+1 (555) 000-1234",
-  email: "contact@retailerp.com",
-  website: "www.retailerp.com",
-  taxId: "12-3456789",
-  currency: "USD",
-  taxRate: "10",
-  dateFormat: "MM/DD/YYYY",
-  timezone: "America/New_York",
-  language: "en",
-  emailNotifications: true,
-  lowStockAlerts: true,
-  orderNotifications: true,
-  reportEmails: false,
-  invoicePrefix: "INV",
-  poPrefix: "PO",
-  autoBackup: true,
-  twoFactor: false,
+// ── Utility: DB column mapping ──────────────────────────────
+// Maps camelCase TypeScript keys to snake_case DB columns
+
+export function toSnakeCase(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    const snakeKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+    result[snakeKey] = value
+  }
+  return result
+}
+
+export function toCamelCase<T = Record<string, unknown>>(obj: Record<string, unknown>): T {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+    result[camelKey] = value
+  }
+  return result as T
 }

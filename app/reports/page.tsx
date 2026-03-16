@@ -5,7 +5,7 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
+import { useTableData } from "@/hooks/use-table-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency } from "@/lib/utils"
 import type { Sale, InventoryItem, Product } from "@/lib/types"
@@ -26,13 +26,18 @@ function lastNMonths(n: number) {
 
 export default function ReportsPage() {
   const { t } = useI18n()
-  const [sales] = useSupabaseData<Sale[]>("erp-sales", [])
-  const [inventory] = useSupabaseData<InventoryItem[]>("erp-inventory", [])
-  const [products] = useSupabaseData<Product[]>("erp-products", [])
+
+  // ── Data from normalized DB tables ────────────────────────
+  const { data: sales } = useTableData<Sale>("sales", { select: "*, sale_items(*)" })
+  const { data: inventory } = useTableData<InventoryItem>("inventory")
+  const { data: products } = useTableData<Product>("products")
 
   const [activeTab, setActiveTab] = useState("sales")
 
   const completedSales = sales.filter((s) => s.status === "completed")
+
+  // Build product lookup for category resolution
+  const productById = new Map(products.map((p) => [p.id, p]))
 
   // ── KPI values ───────────────────────────────────────────────
   const totalRevenue = completedSales.reduce((sum, s) => sum + s.total, 0)
@@ -42,7 +47,7 @@ export default function ReportsPage() {
   // Top customer by spend
   const customerMap: Record<string, number> = {}
   completedSales.forEach((s) => {
-    const cust = s.customer ?? "Unknown"
+    const cust = s.customerName ?? "Unknown"
     customerMap[cust] = (customerMap[cust] || 0) + (s.total ?? 0)
   })
   const topCustomer = Object.entries(customerMap).sort((a, b) => b[1] - a[1])[0]
@@ -50,7 +55,7 @@ export default function ReportsPage() {
   // ── Sales by month (last 7 months) ──────────────────────────
   const months = lastNMonths(7)
   const salesByMonth = months.map(({ label, key }) => {
-    const monthSales = completedSales.filter((s) => s.date.startsWith(key))
+    const monthSales = completedSales.filter((s) => s.date?.startsWith(key))
     return {
       label,
       revenue: monthSales.reduce((s, sale) => s + sale.total, 0),
@@ -62,20 +67,21 @@ export default function ReportsPage() {
   // ── Top products by revenue ──────────────────────────────────
   const productRevMap: Record<string, { revenue: number; qty: number }> = {}
   completedSales.flatMap((s) => s.items ?? []).forEach((item) => {
-    if (!item?.name) return
-    if (!productRevMap[item.name]) productRevMap[item.name] = { revenue: 0, qty: 0 }
-    productRevMap[item.name].revenue += (item.qty ?? 0) * (item.price ?? 0)
-    productRevMap[item.name].qty += (item.qty ?? 0)
+    if (!item?.productName) return
+    if (!productRevMap[item.productName]) productRevMap[item.productName] = { revenue: 0, qty: 0 }
+    productRevMap[item.productName].revenue += (item.quantity ?? 0) * (item.unitPrice ?? 0)
+    productRevMap[item.productName].qty += (item.quantity ?? 0)
   })
   const topProducts = Object.entries(productRevMap)
     .map(([name, data]) => ({ name, ...data }))
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 5)
 
-  // ── Inventory by category ────────────────────────────────────
+  // ── Inventory by category (join with products for category) ──
   const catMap: Record<string, { count: number; units: number }> = {}
   inventory.forEach((item) => {
-    const cat = item.category ?? "Uncategorized"
+    const product = productById.get(item.productId)
+    const cat = product?.category ?? "Uncategorized"
     if (!catMap[cat]) catMap[cat] = { count: 0, units: 0 }
     catMap[cat].count += 1
     catMap[cat].units += (item.stock ?? 0)
@@ -89,7 +95,7 @@ export default function ReportsPage() {
     .map(([name, total]) => ({
       name,
       total,
-      orders: completedSales.filter((s) => s.customer === name).length,
+      orders: completedSales.filter((s) => s.customerName === name).length,
     }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 5)

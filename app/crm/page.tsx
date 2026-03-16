@@ -4,43 +4,20 @@ import { PageGuard } from "@/components/shared/permission-guard"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
-import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
+import { useTableData } from "@/hooks/use-table-data"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
+import type { Lead } from "@/lib/types"
 import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { SearchInput } from "@/components/shared/search-input"
-import { Target, Users, DollarSign, TrendingUp, Mail, Phone, Building2, Calendar, X, GripVertical } from "lucide-react"
+import { Target, Users, DollarSign, TrendingUp, Mail, Phone, Building2, Calendar, X } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
 
-interface Lead {
-  id: string
-  name: string
-  company: string
-  email: string
-  phone: string
-  value: number
-  source: string
-  stage: string
-  assignedTo: string
-  lastContact: string
-  createdAt: string
-}
-
-const initialLeads: Lead[] = [
-  { id: "L-001", name: "James Wilson", company: "TechCorp Inc", email: "james@techcorp.com", phone: "+1 (555) 100-1001", value: 45000, source: "Website", stage: "new", assignedTo: "Sarah Davis", lastContact: "2025-03-01", createdAt: "2025-02-15" },
-  { id: "L-002", name: "Maria Garcia", company: "InnovateCo", email: "maria@innovateco.com", phone: "+1 (555) 100-1002", value: 78000, source: "Referral", stage: "qualified", assignedTo: "John Miller", lastContact: "2025-03-05", createdAt: "2025-01-20" },
-  { id: "L-003", name: "Robert Chen", company: "Global Systems", email: "robert@globalsys.com", phone: "+1 (555) 100-1003", value: 120000, source: "LinkedIn", stage: "proposal", assignedTo: "Sarah Davis", lastContact: "2025-03-07", createdAt: "2025-01-10" },
-  { id: "L-004", name: "Emily Brown", company: "StartupXYZ", email: "emily@startupxyz.com", phone: "+1 (555) 100-1004", value: 25000, source: "Trade Show", stage: "negotiation", assignedTo: "Mike Johnson", lastContact: "2025-03-08", createdAt: "2025-02-01" },
-  { id: "L-005", name: "David Park", company: "MegaRetail", email: "david@megaretail.com", phone: "+1 (555) 100-1005", value: 95000, source: "Website", stage: "won", assignedTo: "John Miller", lastContact: "2025-02-28", createdAt: "2024-12-15" },
-  { id: "L-006", name: "Lisa Thompson", company: "FoodChain Ltd", email: "lisa@foodchain.com", phone: "+1 (555) 100-1006", value: 55000, source: "Referral", stage: "qualified", assignedTo: "Sarah Davis", lastContact: "2025-03-04", createdAt: "2025-02-10" },
-  { id: "L-007", name: "Kevin Moore", company: "BuildRight Co", email: "kevin@buildright.com", phone: "+1 (555) 100-1007", value: 35000, source: "LinkedIn", stage: "new", assignedTo: "Mike Johnson", lastContact: "2025-03-06", createdAt: "2025-02-25" },
-  { id: "L-008", name: "Anna White", company: "HealthFirst", email: "anna@healthfirst.com", phone: "+1 (555) 100-1008", value: 67000, source: "Trade Show", stage: "lost", assignedTo: "John Miller", lastContact: "2025-02-20", createdAt: "2024-11-30" },
-  { id: "L-009", name: "Tom Harris", company: "AutoParts Plus", email: "tom@autoparts.com", phone: "+1 (555) 100-1009", value: 42000, source: "Website", stage: "proposal", assignedTo: "Sarah Davis", lastContact: "2025-03-03", createdAt: "2025-01-25" },
-  { id: "L-010", name: "Sophie Lee", company: "DigitalEdge", email: "sophie@digitaledge.com", phone: "+1 (555) 100-1010", value: 88000, source: "Referral", stage: "negotiation", assignedTo: "Mike Johnson", lastContact: "2025-03-07", createdAt: "2025-02-05" },
-]
-
-const stages = ["new", "qualified", "proposal", "negotiation", "won", "lost"]
+const stages: Lead["stage"][] = ["new", "qualified", "proposal", "negotiation", "won", "lost"]
 const stageLabels: Record<string, string> = { new: "New", qualified: "Qualified", proposal: "Proposal", negotiation: "Negotiation", won: "Won", lost: "Lost" }
 const stageColors: Record<string, string> = {
   new: "bg-purple-50 border-purple-200",
@@ -53,7 +30,12 @@ const stageColors: Record<string, string> = {
 
 export default function CRMPage() {
   const { t } = useI18n()
-  const [leads, setLeads] = useLocalStorage<Lead[]>("erp-leads", initialLeads)
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
+
+  // ── Data from normalized DB table ────────────────────────
+  const { data: leads, loading, insert, update } = useTableData<Lead>("leads")
+
   const [search, setSearch] = useState("")
   const [view, setView] = useState<"kanban" | "table">("kanban")
   const [showDialog, setShowDialog] = useState(false)
@@ -70,18 +52,57 @@ export default function CRMPage() {
   const activeLeads = leads.filter(l => !["won", "lost"].includes(l.stage)).length
   const conversionRate = leads.length > 0 ? ((leads.filter(l => l.stage === "won").length / leads.length) * 100).toFixed(1) : "0"
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name) return
-    const newLead: Lead = {
-      id: `L-${String(leads.length + 1).padStart(3, "0")}`,
-      ...formData,
+    await insert({
+      name: formData.name,
+      company: formData.company,
+      email: formData.email,
+      phone: formData.phone,
       value: parseFloat(formData.value) || 0,
+      source: formData.source,
+      stage: formData.stage as Lead["stage"],
+      assignedTo: formData.assignedTo,
       lastContact: new Date().toISOString().split("T")[0],
-      createdAt: new Date().toISOString().split("T")[0],
+    })
+    if (user?.id && orgId) {
+      logAction({
+        action: "lead.created",
+        module: "crm",
+        description: `Added new lead: ${formData.name} (${formData.company})`,
+        metadata: { name: formData.name, company: formData.company, value: parseFloat(formData.value) || 0 },
+        userId: user.id,
+        orgId,
+      })
     }
-    setLeads([...leads, newLead])
     setShowDialog(false)
     setFormData({ name: "", company: "", email: "", phone: "", value: "", source: "Website", stage: "new", assignedTo: "" })
+  }
+
+  const handleStageChange = async (lead: Lead, newStage: Lead["stage"]) => {
+    await update(lead.id, { stage: newStage })
+    if (user?.id && orgId) {
+      logAction({
+        action: "lead.stageChanged",
+        module: "crm",
+        description: `Moved lead "${lead.name}" from ${stageLabels[lead.stage]} to ${stageLabels[newStage]}`,
+        metadata: { leadId: lead.id, from: lead.stage, to: newStage },
+        userId: user.id,
+        orgId,
+      })
+    }
+    // Update local selectedLead if viewing
+    if (selectedLead?.id === lead.id) {
+      setSelectedLead({ ...lead, stage: newStage })
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+      </div>
+    )
   }
 
   return (
@@ -130,7 +151,7 @@ export default function CRMPage() {
                       <p className="text-sm font-semibold text-indigo-600 mt-2">{formatCurrency(lead.value)}</p>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-xs text-gray-400">{lead.source}</span>
-                        <span className="text-xs text-gray-400">{lead.assignedTo.split(" ")[0]}</span>
+                        <span className="text-xs text-gray-400">{lead.assignedTo?.split(" ")[0] || ""}</span>
                       </div>
                     </button>
                   ))}
@@ -167,9 +188,16 @@ export default function CRMPage() {
                   <td className="px-4 py-3 text-sm text-gray-600">{lead.source}</td>
                   <td className="px-4 py-3"><StatusBadge status={lead.stage} /></td>
                   <td className="px-4 py-3 text-sm text-gray-600">{lead.assignedTo}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{formatDate(lead.lastContact)}</td>
+                  <td className="px-4 py-3 text-sm text-gray-500">{lead.lastContact ? formatDate(lead.lastContact) : "—"}</td>
                 </tr>
               ))}
+              {filteredLeads.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
+                    {leads.length === 0 ? "No leads yet. Click \"Add Lead\" to get started." : "No leads found matching your search."}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -196,13 +224,32 @@ export default function CRMPage() {
                 <div className="flex items-center gap-2 text-sm text-gray-600"><Mail className="h-4 w-4 text-gray-400" />{selectedLead.email}</div>
                 <div className="flex items-center gap-2 text-sm text-gray-600"><Phone className="h-4 w-4 text-gray-400" />{selectedLead.phone}</div>
                 <div className="flex items-center gap-2 text-sm text-gray-600"><Users className="h-4 w-4 text-gray-400" />{selectedLead.assignedTo}</div>
-                <div className="flex items-center gap-2 text-sm text-gray-600"><Calendar className="h-4 w-4 text-gray-400" />{formatDate(selectedLead.lastContact)}</div>
+                <div className="flex items-center gap-2 text-sm text-gray-600"><Calendar className="h-4 w-4 text-gray-400" />{selectedLead.lastContact ? formatDate(selectedLead.lastContact) : "—"}</div>
               </div>
+
+              {/* Quick stage change */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-2">Move to Stage</h4>
+                <div className="flex flex-wrap gap-2">
+                  {stages.filter(s => s !== selectedLead.stage).map(stage => (
+                    <button
+                      key={stage}
+                      onClick={() => handleStageChange(selectedLead, stage)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                    >
+                      {stageLabels[stage]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-2">Activity Timeline</h4>
                 <div className="space-y-3">
                   <div className="flex gap-3"><div className="w-2 h-2 mt-2 rounded-full bg-indigo-500" /><div><p className="text-sm text-gray-700">Lead created via {selectedLead.source}</p><p className="text-xs text-gray-400">{formatDate(selectedLead.createdAt)}</p></div></div>
-                  <div className="flex gap-3"><div className="w-2 h-2 mt-2 rounded-full bg-green-500" /><div><p className="text-sm text-gray-700">Last contacted</p><p className="text-xs text-gray-400">{formatDate(selectedLead.lastContact)}</p></div></div>
+                  {selectedLead.lastContact && (
+                    <div className="flex gap-3"><div className="w-2 h-2 mt-2 rounded-full bg-green-500" /><div><p className="text-sm text-gray-700">Last contacted</p><p className="text-xs text-gray-400">{formatDate(selectedLead.lastContact)}</p></div></div>
+                  )}
                   <div className="flex gap-3"><div className="w-2 h-2 mt-2 rounded-full bg-blue-500" /><div><p className="text-sm text-gray-700">Moved to {stageLabels[selectedLead.stage]} stage</p><p className="text-xs text-gray-400">Current stage</p></div></div>
                 </div>
               </div>

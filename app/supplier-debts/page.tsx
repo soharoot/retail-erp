@@ -5,127 +5,52 @@ import { PERMISSIONS } from "@/lib/rbac/permissions"
 
 import { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
-import { useSupabaseData as useLocalStorage } from "@/hooks/use-supabase-data"
+import { useAuth } from "@/lib/supabase/auth-context"
+import { useRBAC } from "@/lib/rbac/rbac-context"
+import { logAction } from "@/lib/activity/log-action"
+import { useTableData, insertChildRows } from "@/hooks/use-table-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { KpiCard } from "@/components/shared/kpi-card"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { SearchInput } from "@/components/shared/search-input"
-import { Landmark, AlertCircle, CheckCircle2, Clock, X, DollarSign } from "lucide-react"
+import { FormError } from "@/components/shared/form-error"
+import { validatePayment } from "@/lib/validation"
 import { formatCurrency, formatDate } from "@/lib/utils"
-
-interface DebtPayment {
-  date: string
-  amount: number
-  note: string
-}
-
-interface SupplierDebt {
-  id: string
-  supplierId: string
-  supplierName: string
-  purchaseId: string
-  totalAmount: number
-  amountPaid: number
-  remainingDebt: number
-  status: string
-  payments: DebtPayment[]
-  createdAt: string
-}
-
-interface PurchaseOrder {
-  id: string
-  date: string
-  supplier: string
-  supplierId?: string
-  items: { name: string; qty: number; cost: number }[]
-  total: number
-  status: string
-  expectedDate: string
-  amountPaid: number
-  remainingDebt: number
-}
-
-const initialDebts: SupplierDebt[] = [
-  {
-    id: "DEBT-001",
-    supplierId: "1",
-    supplierName: "TechGear Wholesale",
-    purchaseId: "PO-001",
-    totalAmount: 6250,
-    amountPaid: 2000,
-    remainingDebt: 4250,
-    status: "partial",
-    payments: [{ date: "2025-03-05", amount: 2000, note: "Initial payment on delivery" }],
-    createdAt: "2025-03-01",
-  },
-  {
-    id: "DEBT-002",
-    supplierId: "2",
-    supplierName: "SportsPro Suppliers",
-    purchaseId: "PO-002",
-    totalAmount: 1600,
-    amountPaid: 0,
-    remainingDebt: 1600,
-    status: "outstanding",
-    payments: [],
-    createdAt: "2025-02-25",
-  },
-  {
-    id: "DEBT-003",
-    supplierId: "5",
-    supplierName: "Global Electronics Co",
-    purchaseId: "PO-005",
-    totalAmount: 1600,
-    amountPaid: 1600,
-    remainingDebt: 0,
-    status: "paid",
-    payments: [
-      { date: "2025-02-15", amount: 800, note: "First installment" },
-      { date: "2025-03-01", amount: 800, note: "Final payment" },
-    ],
-    createdAt: "2025-02-10",
-  },
-  {
-    id: "DEBT-004",
-    supplierId: "1",
-    supplierName: "TechGear Wholesale",
-    purchaseId: "PO-007",
-    totalAmount: 1950,
-    amountPaid: 500,
-    remainingDebt: 1450,
-    status: "partial",
-    payments: [{ date: "2025-02-01", amount: 500, note: "Partial advance" }],
-    createdAt: "2025-01-28",
-  },
-]
-
-const initialPurchases: PurchaseOrder[] = [
-  { id: "PO-001", date: "2025-03-01", supplier: "TechGear Wholesale", supplierId: "1", items: [{ name: "Wireless Headphones", qty: 50, cost: 65 }, { name: "Smart Watch", qty: 30, cost: 100 }], total: 6250, status: "pending", expectedDate: "2025-03-15", amountPaid: 2000, remainingDebt: 4250 },
-  { id: "PO-002", date: "2025-02-25", supplier: "SportsPro Suppliers", supplierId: "2", items: [{ name: "Running Shoes", qty: 40, cost: 40 }], total: 1600, status: "approved", expectedDate: "2025-03-10", amountPaid: 0, remainingDebt: 1600 },
-  { id: "PO-003", date: "2025-02-20", supplier: "HomeComfort Ltd", supplierId: "3", items: [{ name: "Coffee Maker", qty: 25, cost: 35 }, { name: "Blender Pro", qty: 20, cost: 30 }], total: 1475, status: "received", expectedDate: "2025-03-05", amountPaid: 1475, remainingDebt: 0 },
-  { id: "PO-004", date: "2025-02-15", supplier: "Fashion Forward Inc", supplierId: "4", items: [{ name: "Winter Jacket", qty: 60, cost: 55 }], total: 3300, status: "received", expectedDate: "2025-03-01", amountPaid: 3300, remainingDebt: 0 },
-  { id: "PO-005", date: "2025-02-10", supplier: "Global Electronics Co", supplierId: "5", items: [{ name: "Laptop Stand", qty: 80, cost: 20 }], total: 1600, status: "approved", expectedDate: "2025-03-08", amountPaid: 1600, remainingDebt: 0 },
-  { id: "PO-006", date: "2025-02-05", supplier: "FreshGoods Trading", supplierId: "6", items: [{ name: "Desk Lamp", qty: 35, cost: 18 }], total: 630, status: "cancelled", expectedDate: "2025-02-28", amountPaid: 0, remainingDebt: 0 },
-  { id: "PO-007", date: "2025-01-28", supplier: "TechGear Wholesale", supplierId: "1", items: [{ name: "Wireless Headphones", qty: 30, cost: 65 }], total: 1950, status: "received", expectedDate: "2025-02-15", amountPaid: 500, remainingDebt: 1450 },
-  { id: "PO-008", date: "2025-01-20", supplier: "SportsPro Suppliers", supplierId: "2", items: [{ name: "Tennis Racket", qty: 20, cost: 70 }, { name: "Yoga Mat", qty: 50, cost: 12 }], total: 2000, status: "received", expectedDate: "2025-02-10", amountPaid: 2000, remainingDebt: 0 },
-]
+import type { SupplierDebt, DebtPayment, PurchaseOrder } from "@/lib/types"
+import { Landmark, AlertCircle, CheckCircle2, Clock, X, DollarSign } from "lucide-react"
 
 export default function SupplierDebtsPage() {
   const { t } = useI18n()
-  const [debts, setDebts] = useLocalStorage<SupplierDebt[]>("erp-supplier-debts", initialDebts)
-  const [purchases, setPurchases] = useLocalStorage<PurchaseOrder[]>("erp-purchases", initialPurchases)
+  const { user } = useAuth()
+  const { orgId } = useRBAC()
+
+  const {
+    data: debts,
+    loading,
+    update: updateDebt,
+    refresh: refreshDebts,
+  } = useTableData<SupplierDebt>("supplier_debts", {
+    select: "*, debt_payments(*)",
+    orderBy: { column: "createdAt", ascending: false },
+  })
+
+  const {
+    update: updatePurchase,
+  } = useTableData<PurchaseOrder>("purchase_orders", { manual: true })
+
   const [search, setSearch] = useState("")
   const [activeTab, setActiveTab] = useState("all")
   const [paymentDialog, setPaymentDialog] = useState<SupplierDebt | null>(null)
   const [detailDialog, setDetailDialog] = useState<SupplierDebt | null>(null)
   const [paymentAmount, setPaymentAmount] = useState("")
   const [paymentNote, setPaymentNote] = useState("")
+  const [paymentError, setPaymentError] = useState("")
 
   // KPI calculations
-  const totalOutstanding = debts.filter(d => d.status !== "paid").reduce((sum, d) => sum + d.remainingDebt, 0)
-  const activeDebts = debts.filter(d => d.status !== "paid").length
-  const fullyPaid = debts.filter(d => d.status === "paid").length
-  const partiallyPaid = debts.filter(d => d.status === "partial").length
+  const totalOutstanding = debts.filter((d) => d.status !== "paid").reduce((sum, d) => sum + (d.remainingDebt ?? 0), 0)
+  const activeDebts = debts.filter((d) => d.status !== "paid").length
+  const fullyPaid = debts.filter((d) => d.status === "paid").length
+  const partiallyPaid = debts.filter((d) => d.status === "partial").length
 
   // Filter by tab
   const tabs = [
@@ -134,48 +59,73 @@ export default function SupplierDebtsPage() {
     { id: "partial", label: t("supplierDebts.partial") },
     { id: "paid", label: t("supplierDebts.paid") },
   ]
-  const tabFiltered = activeTab === "all" ? debts : debts.filter(d => d.status === activeTab)
-  const filtered = tabFiltered.filter(d =>
-    (d.supplierName ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (d.purchaseId ?? "").toLowerCase().includes(search.toLowerCase())
+  const tabFiltered = activeTab === "all" ? debts : debts.filter((d) => d.status === activeTab)
+  const filtered = tabFiltered.filter(
+    (d) =>
+      (d.supplierName ?? "").toLowerCase().includes(search.toLowerCase()) ||
+      (d.purchaseOrderId ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
-  const handleRecordPayment = () => {
+  const handleRecordPayment = async () => {
     if (!paymentDialog) return
     const amount = parseFloat(paymentAmount)
-    if (isNaN(amount) || amount <= 0 || amount > paymentDialog.remainingDebt) return
+
+    const validation = validatePayment({ amount: paymentAmount, maxAmount: paymentDialog.remainingDebt })
+    if (!validation.valid) {
+      setPaymentError(validation.errors.amount ?? "Invalid payment")
+      return
+    }
 
     const today = new Date().toISOString().split("T")[0]
-    const newPayment: DebtPayment = { date: today, amount, note: paymentNote || "Payment recorded" }
 
-    // Update the debt record
-    setDebts(debts.map(d => {
-      if (d.id !== paymentDialog.id) return d
-      const newAmountPaid = d.amountPaid + amount
-      const newRemaining = d.totalAmount - newAmountPaid
-      return {
-        ...d,
+    // 1. Insert debt payment
+    await insertChildRows("debt_payments", [
+      { debtId: paymentDialog.id, amount, date: today, note: paymentNote || "Payment recorded" },
+    ])
+
+    // 2. Update debt record
+    const newAmountPaid = (paymentDialog.amountPaid ?? 0) + amount
+    const newRemaining = (paymentDialog.totalAmount ?? 0) - newAmountPaid
+    const newStatus = newRemaining <= 0 ? "paid" : "partial"
+
+    await updateDebt(paymentDialog.id, {
+      amountPaid: newAmountPaid,
+      remainingDebt: Math.max(0, newRemaining),
+      status: newStatus,
+    } as Partial<SupplierDebt>)
+
+    // 3. Sync payment back to purchase order
+    if (paymentDialog.purchaseOrderId) {
+      await updatePurchase(paymentDialog.purchaseOrderId, {
         amountPaid: newAmountPaid,
-        remainingDebt: newRemaining,
-        status: newRemaining <= 0 ? "paid" : "partial",
-        payments: [...d.payments, newPayment],
-      }
-    }))
+        remainingDebt: Math.max(0, newRemaining),
+      } as Partial<PurchaseOrder>)
+    }
 
-    // Sync payment back to the corresponding purchase order
-    setPurchases(purchases.map(p => {
-      if (p.id !== paymentDialog.purchaseId) return p
-      const newPaid = p.amountPaid + amount
-      return {
-        ...p,
-        amountPaid: newPaid,
-        remainingDebt: p.total - newPaid,
-      }
-    }))
+    // 4. Log action
+    if (user?.id && orgId) {
+      logAction({
+        action: "debt.payment_recorded",
+        module: "supplier-debts",
+        description: `Recorded payment of ${formatCurrency(amount)} for ${paymentDialog.supplierName} (${paymentDialog.purchaseOrderId ?? "N/A"})`,
+        userId: user.id,
+        orgId,
+        userName: user.email ?? undefined,
+        metadata: {
+          debt_id: paymentDialog.id,
+          supplier: paymentDialog.supplierName,
+          amount,
+          new_status: newStatus,
+          remaining: Math.max(0, newRemaining),
+        },
+      })
+    }
 
+    refreshDebts()
     setPaymentDialog(null)
     setPaymentAmount("")
     setPaymentNote("")
+    setPaymentError("")
   }
 
   return (
@@ -196,7 +146,7 @@ export default function SupplierDebtsPage() {
 
       {/* Tabs */}
       <div className="flex gap-4 border-b border-gray-200">
-        {tabs.map(tab => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -208,7 +158,7 @@ export default function SupplierDebtsPage() {
           >
             {tab.label}
             {tab.id !== "all" && (
-              <span className="ml-1 text-xs">({debts.filter(d => d.status === tab.id).length})</span>
+              <span className="ml-1 text-xs">({debts.filter((d) => d.status === tab.id).length})</span>
             )}
           </button>
         ))}
@@ -219,77 +169,84 @@ export default function SupplierDebtsPage() {
 
       {/* Table */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("purchases.supplier")}</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.purchaseRef")}</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.totalAmount")}</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.amountPaid")}</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.remainingDebt")}</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.status")}</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.actions")}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
-                  <Landmark className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  {t("common.noData")}
-                </td>
+        {loading ? (
+          <div className="py-16 text-center">
+            <p className="text-gray-400">Loading debts...</p>
+          </div>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("purchases.supplier")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.purchaseRef")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.totalAmount")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.amountPaid")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("supplierDebts.remainingDebt")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.status")}</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase">{t("common.actions")}</th>
               </tr>
-            ) : (
-              filtered.map(d => (
-                <tr key={d.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm font-medium text-gray-900">{d.supplierName}</td>
-                  <td className="px-4 py-3 text-sm font-mono text-gray-600">{d.purchaseId}</td>
-                  <td className="px-4 py-3 text-sm text-gray-900">{formatCurrency(d.totalAmount)}</td>
-                  <td className="px-4 py-3 text-sm text-green-600 font-medium">{formatCurrency(d.amountPaid)}</td>
-                  <td className="px-4 py-3 text-sm font-medium">
-                    <span className={d.remainingDebt > 0 ? "text-red-600" : "text-green-600"}>
-                      {formatCurrency(d.remainingDebt)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3"><StatusBadge status={d.status} /></td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      {d.status !== "paid" && (
-                        <button
-                          onClick={() => {
-                            setPaymentDialog(d)
-                            setPaymentAmount("")
-                            setPaymentNote("")
-                          }}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
-                        >
-                          <DollarSign className="h-3.5 w-3.5" />
-                          {t("supplierDebts.payTranche")}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setDetailDialog(d)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                      >
-                        Details
-                      </button>
-                    </div>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">
+                    <Landmark className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                    {t("common.noData")}
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                filtered.map((d) => (
+                  <tr key={d.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{d.supplierName}</td>
+                    <td className="px-4 py-3 text-sm font-mono text-gray-600">{d.purchaseOrderId ?? "—"}</td>
+                    <td className="px-4 py-3 text-sm text-gray-900">{formatCurrency(d.totalAmount)}</td>
+                    <td className="px-4 py-3 text-sm text-green-600 font-medium">{formatCurrency(d.amountPaid)}</td>
+                    <td className="px-4 py-3 text-sm font-medium">
+                      <span className={(d.remainingDebt ?? 0) > 0 ? "text-red-600" : "text-green-600"}>
+                        {formatCurrency(d.remainingDebt)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3"><StatusBadge status={d.status} /></td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        {d.status !== "paid" && (
+                          <button
+                            onClick={() => {
+                              setPaymentDialog(d)
+                              setPaymentAmount("")
+                              setPaymentNote("")
+                              setPaymentError("")
+                            }}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
+                          >
+                            <DollarSign className="h-3.5 w-3.5" />
+                            {t("supplierDebts.payTranche")}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setDetailDialog(d)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                          Details
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Record Payment Dialog */}
       {paymentDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setPaymentDialog(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Record Payment</h2>
-                <p className="text-sm text-gray-500 mt-0.5">{paymentDialog.supplierName} - {paymentDialog.purchaseId}</p>
+                <p className="text-sm text-gray-500 mt-0.5">{paymentDialog.supplierName}</p>
               </div>
               <button onClick={() => setPaymentDialog(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
             </div>
@@ -309,7 +266,7 @@ export default function SupplierDebtsPage() {
                 </div>
                 <div>
                   <span className="text-gray-500">Payments Made</span>
-                  <p className="font-semibold text-gray-900">{paymentDialog.payments.length}</p>
+                  <p className="font-semibold text-gray-900">{(paymentDialog.payments ?? []).length}</p>
                 </div>
               </div>
 
@@ -323,15 +280,13 @@ export default function SupplierDebtsPage() {
                     min="0.01"
                     max={paymentDialog.remainingDebt}
                     value={paymentAmount}
-                    onChange={e => setPaymentAmount(e.target.value)}
-                    placeholder={`Max: ${paymentDialog.remainingDebt.toFixed(2)}`}
+                    onChange={(e) => { setPaymentAmount(e.target.value); setPaymentError("") }}
+                    placeholder={`Max: ${(paymentDialog.remainingDebt ?? 0).toFixed(2)}`}
                     className="w-full rounded-lg border border-gray-200 pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
-                {parseFloat(paymentAmount) > paymentDialog.remainingDebt && (
-                  <p className="text-xs text-red-500 mt-1">Amount cannot exceed remaining debt of {formatCurrency(paymentDialog.remainingDebt)}</p>
-                )}
-                {paymentAmount && parseFloat(paymentAmount) === paymentDialog.remainingDebt && (
+                <FormError error={paymentError} />
+                {paymentAmount && parseFloat(paymentAmount) === paymentDialog.remainingDebt && !paymentError && (
                   <p className="text-xs text-green-600 mt-1">This will fully settle the debt</p>
                 )}
               </div>
@@ -340,7 +295,7 @@ export default function SupplierDebtsPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
                 <input
                   value={paymentNote}
-                  onChange={e => setPaymentNote(e.target.value)}
+                  onChange={(e) => setPaymentNote(e.target.value)}
                   placeholder="e.g., Bank transfer, Cash payment..."
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
@@ -355,7 +310,7 @@ export default function SupplierDebtsPage() {
                 </button>
                 <button
                   onClick={handleRecordPayment}
-                  disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || parseFloat(paymentAmount) > paymentDialog.remainingDebt}
+                  disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
                   className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {t("common.save")}
@@ -369,11 +324,11 @@ export default function SupplierDebtsPage() {
       {/* Debt Detail Dialog */}
       {detailDialog && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setDetailDialog(null)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Debt Details</h2>
-                <p className="text-sm text-gray-500 mt-0.5">{detailDialog.id}</p>
+                <p className="text-sm text-gray-500 mt-0.5">{detailDialog.supplierName}</p>
               </div>
               <button onClick={() => setDetailDialog(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
             </div>
@@ -385,7 +340,7 @@ export default function SupplierDebtsPage() {
                 </div>
                 <div>
                   <span className="text-gray-500">{t("supplierDebts.purchaseRef")}</span>
-                  <p className="font-medium font-mono text-gray-900">{detailDialog.purchaseId}</p>
+                  <p className="font-medium font-mono text-gray-900">{detailDialog.purchaseOrderId ?? "—"}</p>
                 </div>
                 <div>
                   <span className="text-gray-500">{t("supplierDebts.totalAmount")}</span>
@@ -401,7 +356,7 @@ export default function SupplierDebtsPage() {
                 </div>
                 <div>
                   <span className="text-gray-500">{t("supplierDebts.remainingDebt")}</span>
-                  <p className={`font-medium ${detailDialog.remainingDebt > 0 ? "text-red-600" : "text-green-600"}`}>
+                  <p className={`font-medium ${(detailDialog.remainingDebt ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>
                     {formatCurrency(detailDialog.remainingDebt)}
                   </p>
                 </div>
@@ -415,12 +370,12 @@ export default function SupplierDebtsPage() {
               <div className="pt-2">
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
                   <span>Payment Progress</span>
-                  <span>{detailDialog.totalAmount > 0 ? Math.round((detailDialog.amountPaid / detailDialog.totalAmount) * 100) : 0}%</span>
+                  <span>{detailDialog.totalAmount > 0 ? Math.round(((detailDialog.amountPaid ?? 0) / detailDialog.totalAmount) * 100) : 0}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className={`h-2 rounded-full transition-all ${detailDialog.status === "paid" ? "bg-green-500" : "bg-indigo-500"}`}
-                    style={{ width: `${detailDialog.totalAmount > 0 ? Math.min((detailDialog.amountPaid / detailDialog.totalAmount) * 100, 100) : 0}%` }}
+                    style={{ width: `${detailDialog.totalAmount > 0 ? Math.min(((detailDialog.amountPaid ?? 0) / detailDialog.totalAmount) * 100, 100) : 0}%` }}
                   />
                 </div>
               </div>
@@ -428,11 +383,11 @@ export default function SupplierDebtsPage() {
               {/* Payment history */}
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-3">{t("supplierDebts.paymentHistory")}</h4>
-                {detailDialog.payments.length === 0 ? (
+                {(detailDialog.payments ?? []).length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-4">No payments recorded yet</p>
                 ) : (
                   <div className="space-y-2">
-                    {detailDialog.payments.map((p, i) => (
+                    {(detailDialog.payments ?? []).map((p, i) => (
                       <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div>
                           <p className="text-sm font-medium text-gray-900">{formatCurrency(p.amount)}</p>
