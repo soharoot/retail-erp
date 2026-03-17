@@ -33,15 +33,6 @@ export const PERMISSIONS = {
   FINANCIAL_VIEW: "financial.view",
   FINANCIAL_MANAGE: "financial.manage",
 
-  HR_VIEW: "hr.view",
-  HR_MANAGE: "hr.manage",
-
-  PROJECTS_VIEW: "projects.view",
-  PROJECTS_MANAGE: "projects.manage",
-
-  CRM_VIEW: "crm.view",
-  CRM_MANAGE: "crm.manage",
-
   REPORTS_VIEW: "reports.view",
 
   SETTINGS_VIEW: "settings.view",
@@ -69,9 +60,6 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionCode> = {
   "/customers": PERMISSIONS.CUSTOMERS_VIEW,
   "/invoicing": PERMISSIONS.INVOICING_VIEW,
   "/financial": PERMISSIONS.FINANCIAL_VIEW,
-  "/hr": PERMISSIONS.HR_VIEW,
-  "/projects": PERMISSIONS.PROJECTS_VIEW,
-  "/crm": PERMISSIONS.CRM_VIEW,
   "/reports": PERMISSIONS.REPORTS_VIEW,
   "/settings": PERMISSIONS.SETTINGS_VIEW,
   "/users": PERMISSIONS.USERS_VIEW,
@@ -98,9 +86,6 @@ export const MODULE_DEFINITIONS = [
   { module: "customers",      label: "Customers",       actions: ["view", "manage"] },
   { module: "invoicing",      label: "Invoicing",       actions: ["view", "manage"] },
   { module: "financial",      label: "Financial",       actions: ["view", "manage"] },
-  { module: "hr",             label: "HR",              actions: ["view", "manage"] },
-  { module: "projects",       label: "Projects",        actions: ["view", "manage"] },
-  { module: "crm",            label: "CRM",             actions: ["view", "manage"] },
   { module: "reports",        label: "Reports",         actions: ["view"] },
   { module: "settings",       label: "Settings",        actions: ["view", "manage"] },
   { module: "users",          label: "User Management", actions: ["view", "manage"] },

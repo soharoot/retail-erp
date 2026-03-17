@@ -107,57 +107,6 @@ export interface InvoiceItem {
   total: number
 }
 
-export interface Employee {
-  id: string
-  name: string
-  email: string
-  phone: string
-  department: string
-  position: string
-  salary: number
-  startDate: string
-  status: "active" | "on-leave" | "inactive"
-  avatar?: string
-}
-
-export interface Project {
-  id: string
-  name: string
-  description: string
-  client: string
-  manager: string
-  startDate: string
-  endDate: string
-  budget: number
-  spent: number
-  status: "active" | "completed" | "on-hold" | "cancelled"
-  progress: number
-  tasks: Task[]
-}
-
-export interface Task {
-  id: string
-  title: string
-  assignee: string
-  status: "todo" | "in-progress" | "done"
-  priority: "low" | "medium" | "high"
-  dueDate: string
-}
-
-export interface Lead {
-  id: string
-  name: string
-  company: string
-  email: string
-  phone: string
-  value: number
-  source: string
-  stage: "new" | "qualified" | "proposal" | "negotiation" | "won" | "lost"
-  assignedTo: string
-  lastContact: string
-  createdAt: string
-}
-
 export interface Expense {
   id: string
   date: string
@@ -196,12 +145,3 @@ export interface InventoryItem extends Product {
   lastRestocked: string
 }
 
-export interface Attendance {
-  id: string
-  employeeId: string
-  employeeName: string
-  date: string
-  checkIn: string
-  checkOut: string
-  status: "present" | "absent" | "late" | "half-day"
-}

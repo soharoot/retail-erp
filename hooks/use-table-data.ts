@@ -84,7 +84,7 @@ export function useTableData<T extends { id: string }>(
 
       // Tables with org_id column get org filter
       // Child tables (sale_items, purchase_items, etc.) are filtered via their parent join
-      const childTables = ["sale_items", "purchase_items", "debt_payments", "tasks"]
+      const childTables = ["sale_items", "purchase_items", "debt_payments"]
       if (!childTables.includes(tableName)) {
         query = query.eq("org_id", orgId)
       }
@@ -165,7 +165,7 @@ export function useTableData<T extends { id: string }>(
 
       const dbRecord = prepareForDb(record)
       // Add org_id for top-level tables
-      const childTables = ["sale_items", "purchase_items", "debt_payments", "tasks"]
+      const childTables = ["sale_items", "purchase_items", "debt_payments"]
       if (!childTables.includes(tableName)) {
         dbRecord.org_id = orgId
       }
