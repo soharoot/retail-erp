@@ -13,10 +13,8 @@ import { PageHeader } from "@/components/layout/page-header"
 import { FormError, FormWarning } from "@/components/shared/form-error"
 import { formatCurrency } from "@/lib/utils"
 import { validateProduct } from "@/lib/validation"
-import type { Product, InventoryItem, Category, SubCategory, ProductVariation } from "@/lib/types"
+import type { Product, InventoryItem, Category, SubCategory, ProductVariation, VariationType, VariationValue } from "@/lib/types"
 import { Package, Tag, Edit2, Trash2, Plus, X, Archive, RotateCcw, FolderTree, Minus } from "lucide-react"
-
-const VARIATION_TYPES = ["Taille", "Couleur", "Stockage", "Poids", "Matériau"]
 
 const emptyForm = {
   name: "",
@@ -84,6 +82,24 @@ export default function ProductsPage() {
     orderBy: { column: "variation_type", ascending: true },
   })
 
+  const {
+    data: variationTypes,
+    insert: insertVariationType,
+    remove: removeVariationType,
+    refresh: refreshVariationTypes,
+  } = useTableData<VariationType>("variation_types", {
+    orderBy: { column: "name", ascending: true },
+  })
+
+  const {
+    data: variationValues,
+    insert: insertVariationValue,
+    remove: removeVariationValue,
+    refresh: refreshVariationValues,
+  } = useTableData<VariationValue>("variation_values", {
+    orderBy: { column: "value", ascending: true },
+  })
+
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [form, setForm] = useState(emptyForm)
@@ -103,6 +119,13 @@ export default function ProductsPage() {
   // Variation management state (within product form)
   const [productVariations, setProductVariations] = useState<VariationForm[]>([])
   const [existingVariations, setExistingVariations] = useState<ProductVariation[]>([])
+
+  // Variation types/values management modal state
+  const [showVariationModal, setShowVariationModal] = useState(false)
+  const [newTypeName, setNewTypeName] = useState("")
+  const [newValueName, setNewValueName] = useState("")
+  const [selectedTypeForValue, setSelectedTypeForValue] = useState("")
+  const [varError, setVarError] = useState("")
 
   // ── Derived data ──────────────────────────────────────────
   const activeProducts = products.filter((p) => !p.deletedAt)
@@ -334,6 +357,88 @@ export default function ProductsPage() {
     refreshSubCategories()
   }
 
+  // ── Variation type/value management ──────────────────────
+  const handleAddVariationType = async () => {
+    if (!newTypeName.trim()) { setVarError("Le nom du type est requis"); return }
+    if (variationTypes.some((vt) => vt.name.toLowerCase() === newTypeName.trim().toLowerCase())) {
+      setVarError("Ce type de variation existe déjà"); return
+    }
+    await insertVariationType({ name: newTypeName.trim() } as Partial<VariationType>)
+    setNewTypeName("")
+    setVarError("")
+    await refreshVariationTypes()
+  }
+
+  const handleDeleteVariationType = async (typeId: string) => {
+    // Check if any product_variations use this type name
+    const typeName = variationTypes.find((vt) => vt.id === typeId)?.name
+    if (typeName && variations.some((v) => v.variationType === typeName)) {
+      setVarError(t("products.cannotDeleteVariationType")); return
+    }
+    // Delete associated values first
+    const vals = variationValues.filter((vv) => vv.variationTypeId === typeId)
+    for (const val of vals) await removeVariationValue(val.id, false)
+    await removeVariationType(typeId, false)
+    setVarError("")
+    await refreshVariationTypes()
+    await refreshVariationValues()
+  }
+
+  const handleAddVariationValue = async () => {
+    if (!selectedTypeForValue) { setVarError("Sélectionnez un type de variation"); return }
+    if (!newValueName.trim()) { setVarError("La valeur est requise"); return }
+    const existing = variationValues.filter((vv) => vv.variationTypeId === selectedTypeForValue)
+    if (existing.some((vv) => vv.value.toLowerCase() === newValueName.trim().toLowerCase())) {
+      setVarError("Cette valeur existe déjà pour ce type"); return
+    }
+    await insertVariationValue({ variationTypeId: selectedTypeForValue, value: newValueName.trim() } as Partial<VariationValue>)
+    setNewValueName("")
+    setVarError("")
+    await refreshVariationValues()
+  }
+
+  const handleDeleteVariationValue = async (valueId: string) => {
+    const val = variationValues.find((vv) => vv.id === valueId)
+    if (val) {
+      const typeName = variationTypes.find((vt) => vt.id === val.variationTypeId)?.name
+      if (typeName && variations.some((v) => v.variationType === typeName && v.variationValue === val.value)) {
+        setVarError(t("products.cannotDeleteVariationValue")); return
+      }
+    }
+    await removeVariationValue(valueId, false)
+    setVarError("")
+    await refreshVariationValues()
+  }
+
+  const handleSeedDefaults = async () => {
+    const defaults = [
+      { name: "Taille", values: ["XS", "S", "M", "L", "XL", "XXL"] },
+      { name: "Couleur", values: ["Noir", "Blanc", "Rouge", "Bleu", "Vert"] },
+      { name: "Stockage", values: ["64Go", "128Go", "256Go", "512Go", "1To"] },
+      { name: "Poids", values: ["250g", "500g", "1kg", "2kg", "5kg"] },
+      { name: "Matériau", values: ["Coton", "Polyester", "Cuir", "Métal", "Plastique"] },
+    ]
+    for (const def of defaults) {
+      if (variationTypes.some((vt) => vt.name.toLowerCase() === def.name.toLowerCase())) continue
+      const created = await insertVariationType({ name: def.name } as Partial<VariationType>)
+      if (created) {
+        for (const val of def.values) {
+          await insertVariationValue({ variationTypeId: created.id, value: val } as Partial<VariationValue>)
+        }
+      }
+    }
+    await refreshVariationTypes()
+    await refreshVariationValues()
+  }
+
+  // Build values by type for product form
+  const valuesByType = new Map<string, VariationValue[]>()
+  for (const vv of variationValues) {
+    const list = valuesByType.get(vv.variationTypeId) ?? []
+    list.push(vv)
+    valuesByType.set(vv.variationTypeId, list)
+  }
+
   // ── Variation helpers ─────────────────────────────────────
   const addVariationRow = () => setProductVariations([...productVariations, { variationType: "", variationValue: "", stock: "0" }])
   const removeVariationRow = (idx: number) => setProductVariations(productVariations.filter((_, i) => i !== idx))
@@ -385,6 +490,9 @@ export default function ProductsPage() {
           </select>
           <button onClick={() => setShowCategoryModal(true)} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
             <FolderTree className="h-4 w-4" /> {t("products.manageCategories")}
+          </button>
+          <button onClick={() => { setShowVariationModal(true); setVarError("") }} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            <Tag className="h-4 w-4" /> {t("products.manageVariations")}
           </button>
           <button onClick={() => setShowArchived(!showArchived)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${showArchived ? "border-amber-200 bg-amber-50 text-amber-700" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
             <Archive className="h-4 w-4" />
@@ -540,17 +648,24 @@ export default function ProductsPage() {
                     ))}
                   </div>
                 )}
-                {productVariations.map((v, idx) => (
-                  <div key={idx} className="flex gap-2 items-start mb-2">
-                    <select value={v.variationType} onChange={(e) => updateVariationRow(idx, "variationType", e.target.value)} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                      <option value="">{t("products.variationType")}</option>
-                      {VARIATION_TYPES.map((vt) => <option key={vt} value={vt}>{vt}</option>)}
-                    </select>
-                    <input value={v.variationValue} onChange={(e) => updateVariationRow(idx, "variationValue", e.target.value)} placeholder={t("products.variationValue")} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    <input type="number" min="0" value={v.stock} onChange={(e) => updateVariationRow(idx, "stock", e.target.value)} placeholder="Stock" className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    <button onClick={() => removeVariationRow(idx)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Minus className="h-4 w-4" /></button>
-                  </div>
-                ))}
+                {productVariations.map((v, idx) => {
+                  const selectedType = variationTypes.find((vt) => vt.name === v.variationType)
+                  const typeValues = selectedType ? (valuesByType.get(selectedType.id) ?? []) : []
+                  return (
+                    <div key={idx} className="flex gap-2 items-start mb-2">
+                      <select value={v.variationType} onChange={(e) => { updateVariationRow(idx, "variationType", e.target.value); updateVariationRow(idx, "variationValue", "") }} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="">{t("products.variationType")}</option>
+                        {variationTypes.map((vt) => <option key={vt.id} value={vt.name}>{vt.name}</option>)}
+                      </select>
+                      <select value={v.variationValue} onChange={(e) => updateVariationRow(idx, "variationValue", e.target.value)} disabled={!v.variationType} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                        <option value="">{t("products.variationValue")}</option>
+                        {typeValues.map((tv) => <option key={tv.id} value={tv.value}>{tv.value}</option>)}
+                      </select>
+                      <input type="number" min="0" value={v.stock} onChange={(e) => updateVariationRow(idx, "stock", e.target.value)} placeholder="Stock" className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      <button onClick={() => removeVariationRow(idx)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Minus className="h-4 w-4" /></button>
+                    </div>
+                  )
+                })}
                 {productVariations.length === 0 && existingVariations.length === 0 && <p className="text-xs text-gray-400">{t("products.noVariations")}</p>}
               </div>
             </div>
@@ -630,6 +745,84 @@ export default function ProductsPage() {
             </div>
             <div className="flex justify-end border-t border-gray-100 px-6 py-4 flex-shrink-0">
               <button onClick={() => { setShowCategoryModal(false); setCatError("") }} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{t("common.close")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Variation Management Modal ── */}
+      {showVariationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900">{t("products.variationsTitle")}</h2>
+              <button onClick={() => { setShowVariationModal(false); setVarError("") }} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto">
+              {varError && <FormError error={varError} />}
+
+              {variationTypes.length === 0 && (
+                <div className="rounded-lg bg-blue-50 border border-blue-200 p-3">
+                  <p className="text-sm text-blue-700 mb-2">Aucun type de variation défini.</p>
+                  <button onClick={handleSeedDefaults} className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+                    <Plus className="h-3.5 w-3.5" /> {t("products.seedDefaultTypes")}
+                  </button>
+                </div>
+              )}
+
+              {/* Add variation type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.addVariationType")}</label>
+                <div className="flex gap-2">
+                  <input value={newTypeName} onChange={(e) => { setNewTypeName(e.target.value); setVarError("") }} placeholder={t("products.variationTypeName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <button onClick={handleAddVariationType} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.add")}</button>
+                </div>
+              </div>
+
+              {/* Types list with values */}
+              <div className="space-y-3">
+                {variationTypes.map((vt) => {
+                  const vals = variationValues.filter((vv) => vv.variationTypeId === vt.id)
+                  return (
+                    <div key={vt.id} className="rounded-lg border border-gray-200 p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{vt.name}</span>
+                        <button onClick={() => handleDeleteVariationType(vt.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title={t("common.delete")}><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                      {vals.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {vals.map((val) => (
+                            <span key={val.id} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                              {val.value}
+                              <button onClick={() => handleDeleteVariationValue(val.id)} className="hover:text-red-500 ml-0.5">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {vals.length === 0 && <p className="text-xs text-gray-400 mt-1">Aucune valeur</p>}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Add variation value */}
+              {variationTypes.length > 0 && (
+                <div className="border-t pt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.addVariationValue")}</label>
+                  <div className="flex gap-2">
+                    <select value={selectedTypeForValue} onChange={(e) => setSelectedTypeForValue(e.target.value)} className="w-1/3 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <option value="">{t("products.selectVariationType")}</option>
+                      {variationTypes.map((vt) => <option key={vt.id} value={vt.id}>{vt.name}</option>)}
+                    </select>
+                    <input value={newValueName} onChange={(e) => { setNewValueName(e.target.value); setVarError("") }} placeholder={t("products.variationValue")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    <button onClick={handleAddVariationValue} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.add")}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end border-t border-gray-100 px-6 py-4 flex-shrink-0">
+              <button onClick={() => { setShowVariationModal(false); setVarError("") }} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{t("common.close")}</button>
             </div>
           </div>
         </div>

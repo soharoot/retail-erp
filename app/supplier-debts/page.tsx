@@ -72,7 +72,7 @@ export default function SupplierDebtsPage() {
 
     const validation = validatePayment({ amount: paymentAmount, maxAmount: paymentDialog.remainingDebt })
     if (!validation.valid) {
-      setPaymentError(validation.errors.amount ?? "Invalid payment")
+      setPaymentError(validation.errors.amount ?? "Paiement invalide")
       return
     }
 
@@ -80,7 +80,7 @@ export default function SupplierDebtsPage() {
 
     // 1. Insert debt payment
     await insertChildRows("debt_payments", [
-      { debtId: paymentDialog.id, amount, date: today, note: paymentNote || "Payment recorded" },
+      { debtId: paymentDialog.id, amount, date: today, note: paymentNote || "Paiement enregistré" },
     ])
 
     // 2. Update debt record
@@ -107,7 +107,7 @@ export default function SupplierDebtsPage() {
       logAction({
         action: "debt.payment_recorded",
         module: "supplier-debts",
-        description: `Recorded payment of ${formatCurrency(amount)} for ${paymentDialog.supplierName} (${paymentDialog.purchaseOrderId ?? "N/A"})`,
+        description: `Paiement de ${formatCurrency(amount)} enregistré pour ${paymentDialog.supplierName} (${paymentDialog.purchaseOrderId ?? "N/A"})`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
@@ -121,7 +121,7 @@ export default function SupplierDebtsPage() {
       })
     }
 
-    refreshDebts()
+    await refreshDebts()
     setPaymentDialog(null)
     setPaymentAmount("")
     setPaymentNote("")
@@ -138,10 +138,10 @@ export default function SupplierDebtsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard title="Total Outstanding" value={formatCurrency(totalOutstanding)} subtitle="Unpaid balance" icon={DollarSign} />
-        <KpiCard title="Active Debts" value={String(activeDebts)} subtitle="Pending payments" icon={AlertCircle} />
-        <KpiCard title="Fully Paid" value={String(fullyPaid)} subtitle="Completed debts" icon={CheckCircle2} />
-        <KpiCard title="Partially Paid" value={String(partiallyPaid)} subtitle="In-progress payments" icon={Clock} />
+        <KpiCard title="Total impayé" value={formatCurrency(totalOutstanding)} subtitle="Solde impayé" icon={DollarSign} />
+        <KpiCard title="Dettes actives" value={String(activeDebts)} subtitle="Paiements en attente" icon={AlertCircle} />
+        <KpiCard title="Entièrement payé" value={String(fullyPaid)} subtitle="Dettes réglées" icon={CheckCircle2} />
+        <KpiCard title="Partiellement payé" value={String(partiallyPaid)} subtitle="Paiements en cours" icon={Clock} />
       </div>
 
       {/* Tabs */}
@@ -171,7 +171,7 @@ export default function SupplierDebtsPage() {
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         {loading ? (
           <div className="py-16 text-center">
-            <p className="text-gray-400">Loading debts...</p>
+            <p className="text-gray-400">{t("common.loading")}</p>
           </div>
         ) : (
           <table className="w-full">
@@ -227,7 +227,7 @@ export default function SupplierDebtsPage() {
                           onClick={() => setDetailDialog(d)}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                         >
-                          Details
+                          Détails
                         </button>
                       </div>
                     </td>
@@ -245,7 +245,7 @@ export default function SupplierDebtsPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Record Payment</h2>
+                <h2 className="text-lg font-bold text-gray-900">Enregistrer un paiement</h2>
                 <p className="text-sm text-gray-500 mt-0.5">{paymentDialog.supplierName}</p>
               </div>
               <button onClick={() => setPaymentDialog(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
@@ -265,7 +265,7 @@ export default function SupplierDebtsPage() {
                   <p className="font-semibold text-red-600">{formatCurrency(paymentDialog.remainingDebt)}</p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Payments Made</span>
+                  <span className="text-gray-500">Paiements effectués</span>
                   <p className="font-semibold text-gray-900">{(paymentDialog.payments ?? []).length}</p>
                 </div>
               </div>
@@ -273,7 +273,7 @@ export default function SupplierDebtsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("supplierDebts.paymentAmount")}</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">DA</span>
                   <input
                     type="number"
                     step="0.01"
@@ -282,21 +282,21 @@ export default function SupplierDebtsPage() {
                     value={paymentAmount}
                     onChange={(e) => { setPaymentAmount(e.target.value); setPaymentError("") }}
                     placeholder={`Max: ${(paymentDialog.remainingDebt ?? 0).toFixed(2)}`}
-                    className="w-full rounded-lg border border-gray-200 pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   />
                 </div>
                 <FormError error={paymentError} />
                 {paymentAmount && parseFloat(paymentAmount) === paymentDialog.remainingDebt && !paymentError && (
-                  <p className="text-xs text-green-600 mt-1">This will fully settle the debt</p>
+                  <p className="text-xs text-green-600 mt-1">Ceci réglera entièrement la dette</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Note (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Note (facultatif)</label>
                 <input
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
-                  placeholder="e.g., Bank transfer, Cash payment..."
+                  placeholder="ex: Virement bancaire, paiement espèces..."
                   className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
@@ -327,7 +327,7 @@ export default function SupplierDebtsPage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Debt Details</h2>
+                <h2 className="text-lg font-bold text-gray-900">Détails de la dette</h2>
                 <p className="text-sm text-gray-500 mt-0.5">{detailDialog.supplierName}</p>
               </div>
               <button onClick={() => setDetailDialog(null)} className="p-1 hover:bg-gray-100 rounded"><X className="h-5 w-5" /></button>
@@ -361,7 +361,7 @@ export default function SupplierDebtsPage() {
                   </p>
                 </div>
                 <div>
-                  <span className="text-gray-500">Created</span>
+                  <span className="text-gray-500">Créé le</span>
                   <p className="font-medium text-gray-900">{formatDate(detailDialog.createdAt)}</p>
                 </div>
               </div>
@@ -369,7 +369,7 @@ export default function SupplierDebtsPage() {
               {/* Payment progress bar */}
               <div className="pt-2">
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>Payment Progress</span>
+                  <span>Progression du paiement</span>
                   <span>{detailDialog.totalAmount > 0 ? Math.round(((detailDialog.amountPaid ?? 0) / detailDialog.totalAmount) * 100) : 0}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
@@ -384,7 +384,7 @@ export default function SupplierDebtsPage() {
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-3">{t("supplierDebts.paymentHistory")}</h4>
                 {(detailDialog.payments ?? []).length === 0 ? (
-                  <p className="text-sm text-gray-400 text-center py-4">No payments recorded yet</p>
+                  <p className="text-sm text-gray-400 text-center py-4">Aucun paiement enregistré</p>
                 ) : (
                   <div className="space-y-2">
                     {(detailDialog.payments ?? []).map((p, i) => (
@@ -405,7 +405,7 @@ export default function SupplierDebtsPage() {
                   onClick={() => setDetailDialog(null)}
                   className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50"
                 >
-                  Close
+                  {t("common.close")}
                 </button>
               </div>
             </div>

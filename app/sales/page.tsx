@@ -62,7 +62,7 @@ export default function SalesPage() {
     orderBy: { column: "name", ascending: true },
   })
   const { data: inventory, update: updateInventory, refresh: refreshInventory } = useTableData<InventoryItem>("inventory")
-  const { data: customers } = useTableData<Customer>("customers", {
+  const { data: customers, insert: insertCustomer, refresh: refreshCustomers } = useTableData<Customer>("customers", {
     orderBy: { column: "name", ascending: true },
   })
   const { data: variations, update: updateVariation, refresh: refreshVariations } = useTableData<ProductVariation>("product_variations")
@@ -146,15 +146,11 @@ export default function SalesPage() {
     setShowModal(true)
   }
 
-  const handleCustomerChange = (customerId: string) => {
-    if (customerId === "__walkin__") {
-      setFormCustomerId(null)
-      setFormCustomerName(t("sales.walkInCustomer"))
-    } else {
-      const cust = customers.find((c) => c.id === customerId)
-      setFormCustomerId(customerId)
-      setFormCustomerName(cust?.name ?? "")
-    }
+  const handleCustomerNameChange = (name: string) => {
+    setFormCustomerName(name)
+    // Auto-match existing customer (case-insensitive)
+    const match = activeCustomers.find((c) => c.name.toLowerCase() === name.trim().toLowerCase())
+    setFormCustomerId(match?.id ?? null)
   }
 
   const handleProductChange = (idx: number, productId: string) => {
@@ -203,7 +199,7 @@ export default function SalesPage() {
   // ── save ────────────────────────────────────────────────────
   const handleSave = async () => {
     setStockError(null)
-    if (!formCustomerName.trim() || computedItems.length === 0) return
+    if (computedItems.length === 0) return
 
     // Stock validation — per-variation or per-inventory
     for (const item of computedItems) {
@@ -248,6 +244,31 @@ export default function SalesPage() {
       }
     }
 
+    // Auto-create customer if new name (not walk-in and not matching existing)
+    let resolvedCustomerId = formCustomerId
+    const customerName = formCustomerName.trim() || t("sales.walkInCustomer")
+    if (!resolvedCustomerId && customerName && customerName !== t("sales.walkInCustomer")) {
+      // Double-check no existing match
+      const existing = activeCustomers.find((c) => c.name.toLowerCase() === customerName.toLowerCase())
+      if (existing) {
+        resolvedCustomerId = existing.id
+      } else {
+        const newCustomer = await insertCustomer({
+          name: customerName,
+          email: "",
+          phone: "",
+          company: "",
+          address: "",
+          segment: "New",
+          status: "active",
+        } as Partial<Customer>)
+        if (newCustomer) {
+          resolvedCustomerId = newCustomer.id
+          await refreshCustomers()
+        }
+      }
+    }
+
     if (editingSale) {
       // ── EDIT ──
       // 1. Restore old stock (inventory + variations)
@@ -267,8 +288,8 @@ export default function SalesPage() {
 
       // 2. Update sale header
       await updateSale(editingSale.id, {
-        customerId: formCustomerId,
-        customerName: formCustomerName.trim(),
+        customerId: resolvedCustomerId,
+        customerName: customerName,
         subtotal,
         tax,
         total: grandTotal,
@@ -278,7 +299,7 @@ export default function SalesPage() {
 
       // 3. Replace sale items (delete old, insert new)
       await deleteChildRows("sale_items", "saleId", editingSale.id)
-      await insertChildRows("sale_items", computedItems.map((item) => ({
+      const { error: editItemsError } = await insertChildRows("sale_items", computedItems.map((item) => ({
         saleId: editingSale.id,
         productId: item.productId || null,
         productName: item.productName,
@@ -288,6 +309,10 @@ export default function SalesPage() {
         costAtSale: item.costAtSale,
         lineTotal: item.lineTotal,
       })))
+      if (editItemsError) {
+        setStockError("Échec de l'insertion des articles. Veuillez réessayer.")
+        return
+      }
 
       // 4. Deduct new stock
       for (const item of computedItems) {
@@ -310,7 +335,7 @@ export default function SalesPage() {
         logAction({
           action: "sale.updated",
           module: "sales",
-          description: `Vente ${editingSale.saleNumber} mise à jour pour "${formCustomerName.trim()}" — total ${formatCurrency(grandTotal)}`,
+          description: `Vente ${editingSale.saleNumber} mise à jour pour "${customerName}" — total ${formatCurrency(grandTotal)}`,
           userId: user.id,
           orgId,
           userName: user.email ?? undefined,
@@ -324,8 +349,8 @@ export default function SalesPage() {
       const created = await insertSale({
         saleNumber,
         date: new Date().toISOString().slice(0, 10),
-        customerId: formCustomerId,
-        customerName: formCustomerName.trim(),
+        customerId: resolvedCustomerId,
+        customerName: customerName,
         subtotal,
         tax,
         total: grandTotal,
@@ -336,7 +361,7 @@ export default function SalesPage() {
 
       if (created) {
         // Insert sale items with variationId
-        await insertChildRows("sale_items", computedItems.map((item) => ({
+        const { error: createItemsError } = await insertChildRows("sale_items", computedItems.map((item) => ({
           saleId: created.id,
           productId: item.productId || null,
           productName: item.productName,
@@ -346,6 +371,12 @@ export default function SalesPage() {
           costAtSale: item.costAtSale,
           lineTotal: item.lineTotal,
         })))
+        if (createItemsError) {
+          // Rollback: delete the sale header since items failed
+          await removeSale(created.id, false)
+          setStockError("Échec de l'insertion des articles. Veuillez réessayer.")
+          return
+        }
 
         // Deduct stock
         for (const item of computedItems) {
@@ -366,7 +397,7 @@ export default function SalesPage() {
           logAction({
             action: "sale.created",
             module: "sales",
-            description: `Vente ${saleNumber} créée pour "${formCustomerName.trim()}" — ${computedItems.length} article(s), total ${formatCurrency(grandTotal)}`,
+            description: `Vente ${saleNumber} créée pour "${customerName}" — ${computedItems.length} article(s), total ${formatCurrency(grandTotal)}`,
             userId: user.id,
             orgId,
             userName: user.email ?? undefined,
@@ -377,9 +408,9 @@ export default function SalesPage() {
     }
 
     setShowModal(false)
-    refreshSales()
-    refreshInventory()
-    refreshVariations()
+    await refreshSales()
+    await refreshInventory()
+    await refreshVariations()
   }
 
   // ── delete ──────────────────────────────────────────────────
@@ -418,9 +449,9 @@ export default function SalesPage() {
       }
     }
 
-    refreshSales()
-    refreshInventory()
-    refreshVariations()
+    await refreshSales()
+    await refreshInventory()
+    await refreshVariations()
     setDeleteConfirm(null)
   }
 
@@ -577,16 +608,25 @@ export default function SalesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("sales.customer")} *</label>
-                  <select
-                    value={formCustomerId ?? "__walkin__"}
-                    onChange={(e) => handleCustomerChange(e.target.value)}
+                  <input
+                    list="customer-suggestions"
+                    value={formCustomerName}
+                    onChange={(e) => handleCustomerNameChange(e.target.value)}
+                    placeholder={t("sales.walkInCustomer")}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  >
-                    <option value="__walkin__">{t("sales.walkInCustomer")}</option>
+                  />
+                  <datalist id="customer-suggestions">
+                    <option value={t("sales.walkInCustomer")} />
                     {activeCustomers.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}{c.company ? ` (${c.company})` : ""}</option>
+                      <option key={c.id} value={c.name}>{c.company ? `(${c.company})` : ""}</option>
                     ))}
-                  </select>
+                  </datalist>
+                  {formCustomerName.trim() && !formCustomerId && formCustomerName.trim() !== t("sales.walkInCustomer") && (
+                    <p className="text-xs text-indigo-600 mt-1">Un nouveau client sera créé automatiquement</p>
+                  )}
+                  {formCustomerId && (
+                    <p className="text-xs text-green-600 mt-1">Client existant sélectionné</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("sales.payment")}</label>
@@ -754,7 +794,7 @@ export default function SalesPage() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={!formCustomerName.trim() || computedItems.length === 0}
+                disabled={computedItems.length === 0}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 {editingSale ? t("common.save") : t("sales.newSale")}

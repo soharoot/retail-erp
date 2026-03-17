@@ -7,7 +7,7 @@ import Link from "next/link"
 import { useTableData } from "@/hooks/use-table-data"
 import { formatCurrency, formatDate, lastNMonths } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
-import type { Sale, PurchaseOrder, SupplierDebt, InventoryItem, Product } from "@/lib/types"
+import type { Sale, PurchaseOrder, SupplierDebt, InventoryItem, Product, ProductVariation } from "@/lib/types"
 import {
   DollarSign, TrendingUp, TrendingDown, AlertTriangle,
   ShoppingCart, ClipboardList, Package, BarChart3,
@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const { data: debts } = useTableData<SupplierDebt>("supplier_debts")
   const { data: inventory } = useTableData<InventoryItem>("inventory")
   const { data: products } = useTableData<Product>("products")
+  const { data: variations } = useTableData<ProductVariation>("product_variations")
 
   // ── KPI calculations ────────────────────────────────────────
   const completedSales = sales.filter((s) => s.status === "completed")
@@ -47,10 +48,15 @@ export default function DashboardPage() {
 
   // Build product cost map once
   const productCostMap = new Map(products.map((p) => [p.id, p.cost ?? 0]))
-  const inventoryValue = inventory.reduce(
+  const baseInventoryValue = inventory.reduce(
     (sum, item) => sum + (item.stock ?? 0) * (productCostMap.get(item.productId) ?? 0),
     0
   )
+  const variationStockValue = variations.reduce(
+    (sum, v) => sum + (v.stock ?? 0) * (productCostMap.get(v.productId) ?? 0),
+    0
+  )
+  const inventoryValue = baseInventoryValue + variationStockValue
 
   // ── Monthly chart (last 6 months) — single pass per dataset ─
   const months = lastNMonths(6)
@@ -78,17 +84,33 @@ export default function DashboardPage() {
     .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
     .slice(0, 5)
 
-  // ── Low stock items ─────────────────────────────────────────
+  // ── Low stock items (inventory + variations) ────────────────
   const productNameMap = new Map(products.map((p) => [p.id, { name: p.name, category: p.category }]))
-  const lowStockItems = inventory
+  const inventoryLowStock = inventory
     .filter((i) => (i.stock ?? 0) <= (i.minStock ?? 10))
-    .sort((a, b) => (a.stock ?? 0) - (b.stock ?? 0))
-    .slice(0, 5)
     .map((i) => ({
-      ...i,
-      productName: productNameMap.get(i.productId)?.name ?? "Unknown",
+      id: i.id,
+      productId: i.productId,
+      stock: i.stock ?? 0,
+      minStock: i.minStock ?? 10,
+      productName: productNameMap.get(i.productId)?.name ?? "Inconnu",
       category: productNameMap.get(i.productId)?.category ?? "",
+      variationLabel: "",
     }))
+  const variationLowStock = variations
+    .filter((v) => v.stock <= 5)
+    .map((v) => ({
+      id: v.id,
+      productId: v.productId,
+      stock: v.stock,
+      minStock: 5,
+      productName: productNameMap.get(v.productId)?.name ?? "Inconnu",
+      category: productNameMap.get(v.productId)?.category ?? "",
+      variationLabel: `${v.variationType}: ${v.variationValue}`,
+    }))
+  const lowStockItems = [...inventoryLowStock, ...variationLowStock]
+    .sort((a, b) => a.stock - b.stock)
+    .slice(0, 5)
 
   const kpis = [
     {
@@ -169,7 +191,7 @@ export default function DashboardPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">{t("dashboard.inventoryValue")}</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(inventoryValue)}</p>
-            <p className="text-xs text-gray-400 mt-1">{inventory.length} produits en stock</p>
+            <p className="text-xs text-gray-400 mt-1">{inventory.length + variations.length} articles en stock</p>
           </div>
           <span className="rounded-lg p-3 text-blue-600 bg-blue-50">
             <Warehouse className="h-6 w-6" />
@@ -247,7 +269,7 @@ export default function DashboardPage() {
             <Link href="/sales" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Voir tout</Link>
           </div>
           {salesLoading ? (
-            <div className="py-12 text-center text-sm text-gray-400">Loading...</div>
+            <div className="py-12 text-center text-sm text-gray-400">{t("common.loading")}</div>
           ) : recentSales.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">
               {t("dashboard.noTransactions")}
@@ -266,7 +288,12 @@ export default function DashboardPage() {
                       sale.status === "completed" ? "text-green-600" :
                       sale.status === "pending" ? "text-yellow-600" :
                       sale.status === "refunded" ? "text-red-500" : "text-gray-500"
-                    }`}>{sale.status}</span>
+                    }`}>{
+                      sale.status === "completed" ? "Complété" :
+                      sale.status === "pending" ? "En attente" :
+                      sale.status === "cancelled" ? "Annulé" :
+                      sale.status === "refunded" ? "Remboursé" : sale.status
+                    }</span>
                   </div>
                 </div>
               ))}
@@ -292,7 +319,7 @@ export default function DashboardPage() {
                     <AlertTriangle className={`h-4 w-4 flex-shrink-0 ${(item.stock ?? 0) === 0 ? "text-red-500" : "text-yellow-500"}`} />
                     <div>
                       <p className="text-sm font-medium text-gray-900">{item.productName}</p>
-                      <p className="text-xs text-gray-400">{item.category}</p>
+                      <p className="text-xs text-gray-400">{item.variationLabel ? `${item.category} · ${item.variationLabel}` : item.category}</p>
                     </div>
                   </div>
                   <div className="text-right">

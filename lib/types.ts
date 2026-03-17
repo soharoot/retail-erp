@@ -52,6 +52,23 @@ export interface ProductVariation {
   createdAt: string
 }
 
+// ── Variation Types & Values (reusable across products) ────
+
+export interface VariationType {
+  id: string
+  orgId: string
+  name: string
+  createdAt: string
+}
+
+export interface VariationValue {
+  id: string
+  orgId: string
+  variationTypeId: string
+  value: string
+  createdAt: string
+}
+
 export interface InventoryItem {
   id: string
   orgId: string

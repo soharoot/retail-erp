@@ -49,9 +49,9 @@ export default function InventoryPage() {
   } = useTableData<InventoryItem>("inventory")
 
   const { data: products, loading: productsLoading } = useTableData<Product>("products")
-  const { data: categories } = useTableData<Category>("categories")
-  const { data: subCategories } = useTableData<SubCategory>("sub_categories")
-  const { data: variations, update: updateVariation, refresh: refreshVariations } = useTableData<ProductVariation>("product_variations")
+  const { data: categories, loading: categoriesLoading } = useTableData<Category>("categories")
+  const { data: subCategories, loading: subCategoriesLoading } = useTableData<SubCategory>("sub_categories")
+  const { data: variations, loading: variationsLoading, update: updateVariation, refresh: refreshVariations } = useTableData<ProductVariation>("product_variations")
 
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
@@ -146,7 +146,7 @@ export default function InventoryPage() {
   const outOfStockCount = rows.filter((i) => i.stock === 0).length
   const inventoryValue = rows.reduce((sum, item) => sum + item.stock * item.sellingPrice, 0)
 
-  const loading = inventoryLoading || productsLoading
+  const loading = inventoryLoading || productsLoading || categoriesLoading || subCategoriesLoading || variationsLoading
 
   // ── adjust stock ────────────────────────────────────────────
   const handleAdjust = async () => {

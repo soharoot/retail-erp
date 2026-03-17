@@ -12,12 +12,12 @@ import { useTableData, insertChildRows, deleteChildRows } from "@/hooks/use-tabl
 import { useSettings } from "@/hooks/use-settings"
 import { PageHeader } from "@/components/layout/page-header"
 import { FormError } from "@/components/shared/form-error"
-import { validatePurchase, validatePayment } from "@/lib/validation"
+import { validatePurchase } from "@/lib/validation"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import type { PurchaseOrder, PurchaseItem, Supplier, Product, InventoryItem, SupplierDebt, ProductVariation } from "@/lib/types"
+import type { PurchaseOrder, Supplier, Product, InventoryItem, SupplierDebt, ProductVariation } from "@/lib/types"
 import {
   ClipboardList, Clock, DollarSign, PackageCheck, X, Eye, Trash2,
-  Plus, Minus, CreditCard, AlertTriangle,
+  Plus, Minus, AlertTriangle,
 } from "lucide-react"
 
 function StatusBadge({ status }: { status: string }) {
@@ -39,6 +39,14 @@ function StatusBadge({ status }: { status: string }) {
       {labels[safe] ?? safe}
     </span>
   )
+}
+
+function PaymentBadge({ amountPaid, remainingDebt }: { amountPaid: number; remainingDebt: number }) {
+  if (remainingDebt <= 0 && amountPaid > 0)
+    return <span className="rounded-full px-2.5 py-1 text-xs font-medium bg-green-100 text-green-700">Payé</span>
+  if (amountPaid > 0 && remainingDebt > 0)
+    return <span className="rounded-full px-2.5 py-1 text-xs font-medium bg-orange-100 text-orange-700">Partiel</span>
+  return <span className="rounded-full px-2.5 py-1 text-xs font-medium bg-red-100 text-red-700">Non payé</span>
 }
 
 interface FormItem {
@@ -77,7 +85,6 @@ export default function PurchasesPage() {
   const [showNewOrder, setShowNewOrder] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<PurchaseOrder | null>(null)
-  const [showPayment, setShowPayment] = useState<PurchaseOrder | null>(null)
 
   // Form state
   const [formSupplierId, setFormSupplierId] = useState("")
@@ -87,11 +94,6 @@ export default function PurchasesPage() {
   const [formAmountPaid, setFormAmountPaid] = useState("0")
   const [formExpectedDate, setFormExpectedDate] = useState("")
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
-
-  // Payment form state
-  const [paymentAmount, setPaymentAmount] = useState("")
-  const [paymentNote, setPaymentNote] = useState("")
-  const [paymentError, setPaymentError] = useState("")
 
   const activeSuppliers = suppliers.filter((s) => s.status === "active")
   const activeProducts = products.filter((p) => p.status === "active" && !p.deletedAt)
@@ -241,7 +243,13 @@ export default function PurchasesPage() {
       lineTotal: (parseInt(i.quantity) || 0) * (parseFloat(i.unitCost) || 0),
       variationId: i.variationId || null,
     }))
-    await insertChildRows("purchase_items", itemRows)
+    const { error: itemsError } = await insertChildRows("purchase_items", itemRows)
+    if (itemsError) {
+      // Rollback: delete the PO header since items failed
+      await removeOrder(newOrder.id, false)
+      setFormErrors({ items: "Échec de l'insertion des articles. Veuillez réessayer." })
+      return
+    }
 
     // Update stock: per-variation or per-inventory
     for (const item of validItems) {
@@ -303,8 +311,8 @@ export default function PurchasesPage() {
       })
     }
 
-    refreshOrders()
-    refreshVariations()
+    await refreshOrders()
+    await refreshVariations()
     setShowNewOrder(false)
     resetForm()
   }
@@ -335,6 +343,8 @@ export default function PurchasesPage() {
 
     // Delete purchase items
     await deleteChildRows("purchase_items", "purchaseOrderId", order.id)
+    // Delete associated supplier debt (debt_payments cascade via FK)
+    await deleteChildRows("supplier_debts", "purchaseOrderId", order.id)
     // Hard delete the order
     await removeOrder(order.id, false)
 
@@ -351,8 +361,8 @@ export default function PurchasesPage() {
       })
     }
 
-    refreshOrders()
-    refreshVariations()
+    await refreshOrders()
+    await refreshVariations()
     setDeleteConfirm(null)
   }
 
@@ -373,49 +383,8 @@ export default function PurchasesPage() {
       })
     }
 
-    refreshOrders()
+    await refreshOrders()
     setSelectedOrder(null)
-  }
-
-  // ── Record Payment ───────────────────────────────────────
-  const handleRecordPayment = async () => {
-    if (!showPayment) return
-    const amount = parseFloat(paymentAmount) || 0
-    const maxPayable = showPayment.remainingDebt ?? 0
-
-    const validation = validatePayment({ amount, maxAmount: maxPayable })
-    if (!validation.valid) {
-      setPaymentError(validation.errors.amount ?? "Paiement invalide")
-      return
-    }
-
-    const newPaid = (showPayment.amountPaid ?? 0) + amount
-    const newRemaining = Math.max(0, (showPayment.total ?? 0) - newPaid)
-
-    // Update PO
-    await updateOrder(showPayment.id, {
-      amountPaid: newPaid,
-      remainingDebt: newRemaining,
-    } as Partial<PurchaseOrder>)
-
-    // Audit log
-    if (user?.id && orgId) {
-      logAction({
-        action: "purchase.payment",
-        module: "purchases",
-        description: `Paiement de ${formatCurrency(amount)} enregistré sur BC ${showPayment.poNumber}`,
-        userId: user.id,
-        orgId,
-        userName: user.email ?? undefined,
-        metadata: { poNumber: showPayment.poNumber, amount, newPaid, newRemaining },
-      })
-    }
-
-    refreshOrders()
-    setShowPayment(null)
-    setPaymentAmount("")
-    setPaymentNote("")
-    setPaymentError("")
   }
 
   const loading = ordersLoading
@@ -509,6 +478,7 @@ export default function PurchasesPage() {
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">{t("purchases.amountPaid")}</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">{t("purchases.remainingDebt")}</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">{t("common.status")}</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Paiement</th>
                   <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">{t("common.actions")}</th>
                 </tr>
               </thead>
@@ -527,6 +497,7 @@ export default function PurchasesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center"><StatusBadge status={o.status} /></td>
+                    <td className="px-4 py-3 text-center"><PaymentBadge amountPaid={o.amountPaid ?? 0} remainingDebt={o.remainingDebt ?? 0} /></td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button
@@ -536,15 +507,6 @@ export default function PurchasesPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </button>
-                        {(o.remainingDebt ?? 0) > 0 && o.status !== "cancelled" && (
-                          <button
-                            onClick={() => { setShowPayment(o); setPaymentAmount(""); setPaymentNote(""); setPaymentError("") }}
-                            className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"
-                            title={t("purchases.recordPayment")}
-                          >
-                            <CreditCard className="h-4 w-4" />
-                          </button>
-                        )}
                         <button
                           onClick={() => setDeleteConfirm(o)}
                           className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600"
@@ -583,6 +545,7 @@ export default function PurchasesPage() {
                 <div><span className="text-gray-500">Date prévue :</span><p className="font-medium">{selectedOrder.expectedDate ? formatDate(selectedOrder.expectedDate) : "—"}</p></div>
                 <div><span className="text-gray-500">{t("purchases.amountPaid")} :</span><p className="font-medium text-green-600">{formatCurrency(selectedOrder.amountPaid ?? 0)}</p></div>
                 <div><span className="text-gray-500">{t("purchases.remainingDebt")} :</span><p className={`font-medium ${(selectedOrder.remainingDebt ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(selectedOrder.remainingDebt ?? 0)}</p></div>
+                <div><span className="text-gray-500">Paiement :</span><div className="mt-1"><PaymentBadge amountPaid={selectedOrder.amountPaid ?? 0} remainingDebt={selectedOrder.remainingDebt ?? 0} /></div></div>
               </div>
               <div className="border-t pt-4">
                 <h4 className="text-sm font-medium text-gray-900 mb-3">{t("purchases.orderItems")}</h4>
@@ -632,20 +595,6 @@ export default function PurchasesPage() {
                     {t("purchases.markReceived")}
                   </button>
                 )}
-                {(selectedOrder.remainingDebt ?? 0) > 0 && selectedOrder.status !== "cancelled" && (
-                  <button
-                    onClick={() => {
-                      setSelectedOrder(null)
-                      setShowPayment(selectedOrder)
-                      setPaymentAmount("")
-                      setPaymentNote("")
-                      setPaymentError("")
-                    }}
-                    className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                  >
-                    {t("purchases.recordPayment")}
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -676,71 +625,6 @@ export default function PurchasesPage() {
                 className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
               >
                 {t("common.delete")}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Record Payment Modal ── */}
-      {showPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">{t("purchases.recordPayment")}</h2>
-              <button
-                onClick={() => { setShowPayment(null); setPaymentError("") }}
-                className="p-1 rounded-lg hover:bg-gray-100"
-              >
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="rounded-lg bg-gray-50 p-3">
-                <p className="font-medium text-gray-900">BC {showPayment.poNumber}</p>
-                <p className="text-sm text-gray-500 mt-0.5">{showPayment.supplierName}</p>
-                <div className="flex justify-between mt-2 text-sm">
-                  <span className="text-gray-500">Reste à payer :</span>
-                  <span className="font-semibold text-red-600">{formatCurrency(showPayment.remainingDebt ?? 0)}</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("purchases.paymentAmount")}</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  max={showPayment.remainingDebt ?? 0}
-                  value={paymentAmount}
-                  onChange={(e) => { setPaymentAmount(e.target.value); setPaymentError("") }}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="0.00"
-                />
-                <FormError error={paymentError} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("purchases.paymentNote")}</label>
-                <input
-                  value={paymentNote}
-                  onChange={(e) => setPaymentNote(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="ex: Virement bancaire #1234"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
-              <button
-                onClick={() => { setShowPayment(null); setPaymentError("") }}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={handleRecordPayment}
-                disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {t("purchases.recordPayment")}
               </button>
             </div>
           </div>
