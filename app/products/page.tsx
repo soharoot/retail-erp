@@ -13,21 +13,24 @@ import { PageHeader } from "@/components/layout/page-header"
 import { FormError, FormWarning } from "@/components/shared/form-error"
 import { formatCurrency } from "@/lib/utils"
 import { validateProduct } from "@/lib/validation"
-import type { Product, InventoryItem } from "@/lib/types"
-import { Package, Tag, Edit2, Trash2, Plus, X, Archive, RotateCcw } from "lucide-react"
+import type { Product, InventoryItem, Category, SubCategory, ProductVariation } from "@/lib/types"
+import { Package, Tag, Edit2, Trash2, Plus, X, Archive, RotateCcw, FolderTree, Minus } from "lucide-react"
 
-const DEFAULT_CATEGORIES = [
-  "Electronics", "Clothing", "Food & Beverage", "Home & Garden",
-  "Sports & Outdoors", "Books & Media", "Toys & Games", "Health & Beauty",
-]
+const VARIATION_TYPES = ["Taille", "Couleur", "Stockage", "Poids", "Matériau"]
 
 const emptyForm = {
   name: "",
-  category: "",
+  categoryId: "",
+  subCategoryId: "",
   description: "",
   price: "",
-  cost: "",
   status: "active" as "active" | "inactive",
+}
+
+interface VariationForm {
+  variationType: string
+  variationValue: string
+  stock: string
 }
 
 export default function ProductsPage() {
@@ -53,6 +56,34 @@ export default function ProductsPage() {
     loading: inventoryLoading,
   } = useTableData<InventoryItem>("inventory")
 
+  const {
+    data: categories,
+    loading: categoriesLoading,
+    insert: insertCategory,
+    remove: removeCategory,
+    refresh: refreshCategories,
+  } = useTableData<Category>("categories", {
+    orderBy: { column: "name", ascending: true },
+  })
+
+  const {
+    data: subCategories,
+    insert: insertSubCategory,
+    remove: removeSubCategory,
+    refresh: refreshSubCategories,
+  } = useTableData<SubCategory>("sub_categories", {
+    orderBy: { column: "name", ascending: true },
+  })
+
+  const {
+    data: variations,
+    insert: insertVariation,
+    remove: removeVariation,
+    refresh: refreshVariations,
+  } = useTableData<ProductVariation>("product_variations", {
+    orderBy: { column: "variation_type", ascending: true },
+  })
+
   const [showModal, setShowModal] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [form, setForm] = useState(emptyForm)
@@ -62,27 +93,53 @@ export default function ProductsPage() {
   const [filterCat, setFilterCat] = useState("All")
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
+  // Category management state
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
+  const [newSubCategoryName, setNewSubCategoryName] = useState("")
+  const [selectedCategoryForSub, setSelectedCategoryForSub] = useState("")
+  const [catError, setCatError] = useState("")
+
+  // Variation management state (within product form)
+  const [productVariations, setProductVariations] = useState<VariationForm[]>([])
+  const [existingVariations, setExistingVariations] = useState<ProductVariation[]>([])
+
   // ── Derived data ──────────────────────────────────────────
   const activeProducts = products.filter((p) => !p.deletedAt)
   const displayProducts = showArchived ? products : activeProducts
 
-  const categories = [...new Set(activeProducts.map((p) => p.category).filter(Boolean))]
-  if (!categories.length) categories.push(...DEFAULT_CATEGORIES)
+  // Category/sub-category maps
+  const categoryMap = new Map(categories.map((c) => [c.id, c]))
+  const subCategoryMap = new Map(subCategories.map((s) => [s.id, s]))
+
+  // Sub-categories filtered by selected category in form
+  const filteredSubCats = form.categoryId
+    ? subCategories.filter((s) => s.categoryId === form.categoryId)
+    : []
 
   const filtered = displayProducts.filter((p) => {
+    const catName = p.categoryId ? categoryMap.get(p.categoryId)?.name ?? "" : p.category ?? ""
     const matchesSearch =
       (p.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-      (p.category ?? "").toLowerCase().includes(search.toLowerCase())
-    const matchesCat = filterCat === "All" || p.category === filterCat
+      catName.toLowerCase().includes(search.toLowerCase())
+    const matchesCat = filterCat === "All" || p.categoryId === filterCat || p.category === filterCat
     return matchesSearch && matchesCat
   })
 
   const totalProducts = activeProducts.length
   const activeCount = activeProducts.filter((p) => p.status === "active").length
-  const totalCategories = [...new Set(activeProducts.map((p) => p.category))].length
+  const totalCategories = categories.length
   const lowStockCount = inventoryItems.filter(
     (i) => (i.stock ?? 0) > 0 && (i.stock ?? 0) <= (i.minStock ?? 10)
   ).length
+
+  // Variations per product
+  const variationsByProduct = new Map<string, ProductVariation[]>()
+  for (const v of variations) {
+    const list = variationsByProduct.get(v.productId) ?? []
+    list.push(v)
+    variationsByProduct.set(v.productId, list)
+  }
 
   // ── Modal helpers ─────────────────────────────────────────
   const openAdd = () => {
@@ -90,6 +147,8 @@ export default function ProductsPage() {
     setForm(emptyForm)
     setErrors({})
     setWarnings([])
+    setProductVariations([])
+    setExistingVariations([])
     setShowModal(true)
   }
 
@@ -97,40 +156,44 @@ export default function ProductsPage() {
     setEditingProduct(p)
     setForm({
       name: p.name,
-      category: p.category,
+      categoryId: p.categoryId ?? "",
+      subCategoryId: p.subCategoryId ?? "",
       description: p.description,
       price: String(p.price),
-      cost: String(p.cost),
       status: p.status,
     })
     setErrors({})
     setWarnings([])
+    setProductVariations([])
+    setExistingVariations(variationsByProduct.get(p.id) ?? [])
     setShowModal(true)
   }
 
   // ── Save (create or update) ───────────────────────────────
   const handleSave = async () => {
-    // Validate
     const existingNames = activeProducts
       .filter((p) => p.id !== editingProduct?.id)
       .map((p) => p.name)
 
-    const validation = validateProduct(form, existingNames)
+    const validation = validateProduct(
+      { name: form.name, categoryId: form.categoryId || undefined, price: form.price },
+      existingNames
+    )
     setErrors(validation.errors)
     setWarnings(validation.warnings)
     if (!validation.valid) return
 
     const price = parseFloat(form.price) || 0
-    const cost = parseFloat(form.cost) || 0
+    const catName = form.categoryId ? categoryMap.get(form.categoryId)?.name ?? "" : ""
 
     if (editingProduct) {
-      // Update existing product
       await updateProduct(editingProduct.id, {
         name: form.name.trim(),
-        category: form.category,
+        categoryId: form.categoryId || null,
+        subCategoryId: form.subCategoryId || null,
+        category: catName,
         description: (form.description ?? "").trim(),
         price,
-        cost,
         status: form.status,
       } as Partial<Product>)
 
@@ -138,83 +201,158 @@ export default function ProductsPage() {
         logAction({
           action: "product.updated",
           module: "products",
-          description: `Updated product "${form.name.trim()}" — price: ${price}, cost: ${cost}`,
+          description: `Produit modifié "${form.name.trim()}" — prix: ${price}`,
           userId: user.id,
           orgId,
           userName: user.email ?? undefined,
-          metadata: {
-            product_id: editingProduct.id,
-            previousValue: { name: editingProduct.name, price: editingProduct.price, cost: editingProduct.cost },
-            newValue: { name: form.name.trim(), price, cost },
-          },
+          metadata: { product_id: editingProduct.id },
         })
       }
+
+      // Save new variations for this product
+      for (const v of productVariations) {
+        if (v.variationType && v.variationValue) {
+          await insertVariation({
+            productId: editingProduct.id,
+            variationType: v.variationType,
+            variationValue: v.variationValue,
+            stock: parseInt(v.stock) || 0,
+          } as Partial<ProductVariation>)
+        }
+      }
     } else {
-      // Create new product (inventory entry auto-created by DB trigger)
       const created = await insertProduct({
         name: form.name.trim(),
-        category: form.category,
+        categoryId: form.categoryId || null,
+        subCategoryId: form.subCategoryId || null,
+        category: catName,
         description: (form.description ?? "").trim(),
         price,
-        cost,
+        cost: 0,
         status: form.status,
       } as Partial<Product>)
 
-      if (created && user?.id && orgId) {
-        logAction({
-          action: "product.created",
-          module: "products",
-          description: `Created product "${form.name.trim()}" — price: ${price}, cost: ${cost}`,
-          userId: user.id,
-          orgId,
-          userName: user.email ?? undefined,
-          metadata: { product_id: created.id, price, cost },
-        })
+      if (created) {
+        if (user?.id && orgId) {
+          logAction({
+            action: "product.created",
+            module: "products",
+            description: `Produit créé "${form.name.trim()}" — prix: ${price}`,
+            userId: user.id,
+            orgId,
+            userName: user.email ?? undefined,
+            metadata: { product_id: created.id, price },
+          })
+        }
+
+        // Create variations for new product
+        for (const v of productVariations) {
+          if (v.variationType && v.variationValue) {
+            await insertVariation({
+              productId: created.id,
+              variationType: v.variationType,
+              variationValue: v.variationValue,
+              stock: parseInt(v.stock) || 0,
+            } as Partial<ProductVariation>)
+          }
+        }
       }
     }
 
     setShowModal(false)
     refreshProducts()
+    refreshVariations()
   }
 
   // ── Delete (soft delete) ──────────────────────────────────
   const handleDelete = async (id: string) => {
     const product = products.find((p) => p.id === id)
-    await removeProduct(id, true) // soft delete
+    await removeProduct(id, true)
 
     if (product && user?.id && orgId) {
       logAction({
         action: "product.deleted",
         module: "products",
-        description: `Archived product "${product.name}"`,
+        description: `Produit archivé "${product.name}"`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
-        metadata: { product_id: id, name: product.name, price: product.price },
+        metadata: { product_id: id, name: product.name },
       })
     }
     setDeleteConfirm(null)
   }
 
-  // ── Restore (undo soft delete) ────────────────────────────
   const handleRestore = async (id: string) => {
     await updateProduct(id, { deletedAt: null } as Partial<Product>)
     refreshProducts()
   }
 
-  const statusColor = (s: string) =>
-    s === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+  // ── Category management ───────────────────────────────────
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) { setCatError("Le nom de la catégorie est requis"); return }
+    if (categories.some((c) => c.name.toLowerCase() === newCategoryName.trim().toLowerCase())) {
+      setCatError("Cette catégorie existe déjà"); return
+    }
+    await insertCategory({ name: newCategoryName.trim() } as Partial<Category>)
+    setNewCategoryName("")
+    setCatError("")
+    refreshCategories()
+  }
 
-  const loading = productsLoading || inventoryLoading
+  const handleDeleteCategory = async (catId: string) => {
+    if (products.some((p) => p.categoryId === catId)) {
+      setCatError(t("products.cannotDeleteCategory")); return
+    }
+    const subs = subCategories.filter((s) => s.categoryId === catId)
+    for (const sub of subs) await removeSubCategory(sub.id, false)
+    await removeCategory(catId, false)
+    setCatError("")
+    refreshCategories()
+    refreshSubCategories()
+  }
+
+  const handleAddSubCategory = async () => {
+    if (!selectedCategoryForSub) { setCatError("Sélectionnez une catégorie"); return }
+    if (!newSubCategoryName.trim()) { setCatError("Le nom de la sous-catégorie est requis"); return }
+    const existing = subCategories.filter((s) => s.categoryId === selectedCategoryForSub)
+    if (existing.some((s) => s.name.toLowerCase() === newSubCategoryName.trim().toLowerCase())) {
+      setCatError("Cette sous-catégorie existe déjà"); return
+    }
+    await insertSubCategory({ categoryId: selectedCategoryForSub, name: newSubCategoryName.trim() } as Partial<SubCategory>)
+    setNewSubCategoryName("")
+    setCatError("")
+    refreshSubCategories()
+  }
+
+  const handleDeleteSubCategory = async (subId: string) => {
+    if (products.some((p) => p.subCategoryId === subId)) {
+      setCatError(t("products.cannotDeleteSubCategory")); return
+    }
+    await removeSubCategory(subId, false)
+    setCatError("")
+    refreshSubCategories()
+  }
+
+  // ── Variation helpers ─────────────────────────────────────
+  const addVariationRow = () => setProductVariations([...productVariations, { variationType: "", variationValue: "", stock: "0" }])
+  const removeVariationRow = (idx: number) => setProductVariations(productVariations.filter((_, i) => i !== idx))
+  const updateVariationRow = (idx: number, field: keyof VariationForm, value: string) =>
+    setProductVariations(productVariations.map((v, i) => i === idx ? { ...v, [field]: value } : v))
+
+  const handleDeleteExistingVariation = async (varId: string) => {
+    await removeVariation(varId, false)
+    setExistingVariations(existingVariations.filter((v) => v.id !== varId))
+    refreshVariations()
+  }
+
+  const statusColor = (s: string) => s === "active" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+  const loading = productsLoading || inventoryLoading || categoriesLoading
 
   return (
     <PageGuard permission={PERMISSIONS.PRODUCTS_VIEW}>
     <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title={t("products.title")}
-        subtitle={t("products.subtitle")}
-        action={{ label: t("products.addProduct"), onClick: openAdd }}
-      />
+      <PageHeader title={t("products.title")} subtitle={t("products.subtitle")} action={{ label: t("products.addProduct"), onClick: openAdd }} />
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -227,9 +365,7 @@ export default function ProductsPage() {
           <div key={kpi.label} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <p className="text-xs font-medium text-gray-500">{kpi.label}</p>
-              <span className={`rounded-lg p-1.5 ${kpi.color}`}>
-                <kpi.icon className="h-4 w-4" />
-              </span>
+              <span className={`rounded-lg p-1.5 ${kpi.color}`}><kpi.icon className="h-4 w-4" /></span>
             </div>
             <p className="mt-2 text-2xl font-bold text-gray-900">{kpi.value}</p>
           </div>
@@ -240,34 +376,19 @@ export default function ProductsPage() {
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("common.search")}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("common.search")} className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
-          <select
-            value={filterCat}
-            onChange={(e) => setFilterCat(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="All">All Categories</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+          <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="All">{t("products.allCategories")}</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
-          <button
-            onClick={() => setShowArchived(!showArchived)}
-            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-              showArchived
-                ? "border-amber-200 bg-amber-50 text-amber-700"
-                : "border-gray-200 text-gray-700 hover:bg-gray-50"
-            }`}
-          >
+          <button onClick={() => setShowCategoryModal(true)} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+            <FolderTree className="h-4 w-4" /> {t("products.manageCategories")}
+          </button>
+          <button onClick={() => setShowArchived(!showArchived)} className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${showArchived ? "border-amber-200 bg-amber-50 text-amber-700" : "border-gray-200 text-gray-700 hover:bg-gray-50"}`}>
             <Archive className="h-4 w-4" />
-            {showArchived ? "Hide Archived" : "Show Archived"}
+            {showArchived ? t("products.hideArchived") : t("products.showArchived")}
           </button>
         </div>
       </div>
@@ -275,21 +396,14 @@ export default function ProductsPage() {
       {/* Products table */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         {loading ? (
-          <div className="py-16 text-center">
-            <p className="text-gray-400">Loading products...</p>
-          </div>
+          <div className="py-16 text-center"><p className="text-gray-400">{t("common.loading")}</p></div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <Package className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 font-medium">{t("common.noData")}</p>
-            <p className="text-sm text-gray-400 mt-1">
-              {activeProducts.length === 0 ? "Add your first product to get started" : "Try adjusting your search or filter"}
-            </p>
+            <p className="text-sm text-gray-400 mt-1">{activeProducts.length === 0 ? t("products.addFirstProduct") : t("products.adjustSearch")}</p>
             {activeProducts.length === 0 && (
-              <button
-                onClick={openAdd}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-              >
+              <button onClick={openAdd} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
                 <Plus className="h-4 w-4" /> {t("products.addProduct")}
               </button>
             )}
@@ -301,8 +415,9 @@ export default function ProductsPage() {
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("products.productName")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.category")}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.subCategory")}</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("products.sellingPrice")}</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("products.costPrice")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.variations")}</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.status")}</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.actions")}</th>
                 </tr>
@@ -310,31 +425,25 @@ export default function ProductsPage() {
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((product) => {
                   const isArchived = !!product.deletedAt
+                  const catName = product.categoryId ? categoryMap.get(product.categoryId)?.name : product.category
+                  const subCatName = product.subCategoryId ? subCategoryMap.get(product.subCategoryId)?.name : ""
+                  const prodVars = variationsByProduct.get(product.id) ?? []
                   return (
                     <tr key={product.id} className={`hover:bg-gray-50 transition-colors ${isArchived ? "opacity-60" : ""}`}>
                       <td className="px-4 py-3">
                         <div>
                           <p className="font-medium text-gray-900">
                             {product.name}
-                            {isArchived && (
-                              <span className="ml-2 text-xs text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">Archived</span>
-                            )}
+                            {isArchived && <span className="ml-2 text-xs text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">{t("products.archived")}</span>}
                           </p>
-                          {product.description && (
-                            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{product.description}</p>
-                          )}
+                          {product.description && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{product.description}</p>}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
-                          {product.category}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                        {formatCurrency(product.price ?? 0)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-gray-600">
-                        {formatCurrency(product.cost ?? 0)}
+                      <td className="px-4 py-3">{catName && <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">{catName}</span>}</td>
+                      <td className="px-4 py-3">{subCatName && <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">{subCatName}</span>}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(product.price ?? 0)}</td>
+                      <td className="px-4 py-3 text-center">
+                        {prodVars.length > 0 ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{prodVars.length} var.</span> : <span className="text-xs text-gray-400">—</span>}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${statusColor(product.status ?? "active")}`}>
@@ -344,29 +453,13 @@ export default function ProductsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
                           {isArchived ? (
-                            <button
-                              onClick={() => handleRestore(product.id)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors"
-                              title="Restore product"
-                            >
+                            <button onClick={() => handleRestore(product.id)} className="p-1.5 rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors" title={t("products.restoreProduct")}>
                               <RotateCcw className="h-4 w-4" />
                             </button>
                           ) : (
                             <>
-                              <button
-                                onClick={() => openEdit(product)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                                title={t("products.editProduct")}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => setDeleteConfirm(product.id)}
-                                className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                title={t("products.deleteProduct")}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors" title={t("products.editProduct")}><Edit2 className="h-4 w-4" /></button>
+                              <button onClick={() => setDeleteConfirm(product.id)} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title={t("products.deleteProduct")}><Trash2 className="h-4 w-4" /></button>
                             </>
                           )}
                         </div>
@@ -380,109 +473,90 @@ export default function ProductsPage() {
         )}
       </div>
 
-      {/* ── Add/Edit Modal ── */}
+      {/* ── Add/Edit Product Modal ── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {editingProduct ? t("products.editProduct") : t("products.addProduct")}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-1 rounded-lg hover:bg-gray-100">
-                <X className="h-5 w-5 text-gray-500" />
-              </button>
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900">{editingProduct ? t("products.editProduct") : t("products.addProduct")}</h2>
+              <button onClick={() => setShowModal(false)} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
             </div>
-            <div className="p-6 space-y-4">
-              {warnings.map((w, i) => (
-                <FormWarning key={i} message={w} />
-              ))}
+            <div className="p-6 space-y-4 overflow-y-auto">
+              {warnings.map((w, i) => <FormWarning key={i} message={w} />)}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.productName")} *</label>
-                <input
-                  value={form.name ?? ""}
-                  onChange={(e) => { setForm({ ...form, name: e.target.value }); setErrors((prev) => ({ ...prev, name: "" })) }}
-                  className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.name ? "border-red-300" : "border-gray-200"}`}
-                  placeholder="e.g. Wireless Headphones"
-                />
+                <input value={form.name ?? ""} onChange={(e) => { setForm({ ...form, name: e.target.value }); setErrors((p) => ({ ...p, name: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.name ? "border-red-300" : "border-gray-200"}`} placeholder="ex: Smartphone Samsung A54" />
                 <FormError error={errors.name} />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.category")} *</label>
-                <select
-                  value={form.category}
-                  onChange={(e) => { setForm({ ...form, category: e.target.value }); setErrors((prev) => ({ ...prev, category: "" })) }}
-                  className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.category ? "border-red-300" : "border-gray-200"}`}
-                >
-                  <option value="">Select category</option>
-                  {[...new Set([...DEFAULT_CATEGORIES, ...categories])].map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-                <FormError error={errors.category} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.sellingPrice")} *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.price}
-                    onChange={(e) => { setForm({ ...form, price: e.target.value }); setErrors((prev) => ({ ...prev, price: "" })) }}
-                    className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.price ? "border-red-300" : "border-gray-200"}`}
-                    placeholder="0.00"
-                  />
-                  <FormError error={errors.price} />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.category")} *</label>
+                  <select value={form.categoryId} onChange={(e) => { setForm({ ...form, categoryId: e.target.value, subCategoryId: "" }); setErrors((p) => ({ ...p, category: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.category ? "border-red-300" : "border-gray-200"}`}>
+                    <option value="">{t("products.selectCategory")}</option>
+                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <FormError error={errors.category} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.costPrice")} *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.cost}
-                    onChange={(e) => { setForm({ ...form, cost: e.target.value }); setErrors((prev) => ({ ...prev, cost: "" })) }}
-                    className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.cost ? "border-red-300" : "border-gray-200"}`}
-                    placeholder="0.00"
-                  />
-                  <FormError error={errors.cost} />
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.subCategory")}</label>
+                  <select value={form.subCategoryId} onChange={(e) => setForm({ ...form, subCategoryId: e.target.value })} disabled={!form.categoryId} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                    <option value="">{t("products.selectSubCategory")}</option>
+                    {filteredSubCats.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.sellingPrice")} *</label>
+                <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => { setForm({ ...form, price: e.target.value }); setErrors((p) => ({ ...p, price: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.price ? "border-red-300" : "border-gray-200"}`} placeholder="0.00" />
+                <FormError error={errors.price} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.description")}</label>
-                <textarea
-                  value={form.description ?? ""}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  rows={2}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="Optional product description"
-                />
+                <textarea value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Description optionnelle du produit" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.status")}</label>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                   <option value="active">{t("common.active")}</option>
                   <option value="inactive">{t("common.inactive")}</option>
                 </select>
               </div>
+
+              {/* Variations Section */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-sm font-medium text-gray-700">{t("products.variations")}</label>
+                  <button onClick={addVariationRow} className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700">
+                    <Plus className="h-3.5 w-3.5" /> {t("products.addVariation")}
+                  </button>
+                </div>
+                {existingVariations.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {existingVariations.map((v) => (
+                      <div key={v.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                        <span><span className="font-medium text-gray-700">{v.variationType}:</span> <span className="text-gray-900">{v.variationValue}</span> <span className="text-gray-500">(stock: {v.stock})</span></span>
+                        <button onClick={() => handleDeleteExistingVariation(v.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {productVariations.map((v, idx) => (
+                  <div key={idx} className="flex gap-2 items-start mb-2">
+                    <select value={v.variationType} onChange={(e) => updateVariationRow(idx, "variationType", e.target.value)} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <option value="">{t("products.variationType")}</option>
+                      {VARIATION_TYPES.map((vt) => <option key={vt} value={vt}>{vt}</option>)}
+                    </select>
+                    <input value={v.variationValue} onChange={(e) => updateVariationRow(idx, "variationValue", e.target.value)} placeholder={t("products.variationValue")} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    <input type="number" min="0" value={v.stock} onChange={(e) => updateVariationRow(idx, "stock", e.target.value)} placeholder="Stock" className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    <button onClick={() => removeVariationRow(idx)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Minus className="h-4 w-4" /></button>
+                  </div>
+                ))}
+                {productVariations.length === 0 && existingVariations.length === 0 && <p className="text-xs text-gray-400">{t("products.noVariations")}</p>}
+              </div>
             </div>
-            <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
-              <button
-                onClick={() => setShowModal(false)}
-                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={handleSave}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-              >
-                {editingProduct ? t("common.save") : t("products.addProduct")}
-              </button>
+            <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4 flex-shrink-0">
+              <button onClick={() => setShowModal(false)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{t("common.cancel")}</button>
+              <button onClick={handleSave} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{editingProduct ? t("common.save") : t("products.addProduct")}</button>
             </div>
           </div>
         </div>
@@ -492,23 +566,70 @@ export default function ProductsPage() {
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Archive Product</h3>
-            <p className="text-sm text-gray-500 mb-6">
-              This product will be archived and hidden from active lists. It can be restored later. Historical records (sales, invoices) will be preserved.
-            </p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("products.archiveProduct")}</h3>
+            <p className="text-sm text-gray-500 mb-6">{t("products.archiveConfirm")}</p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="flex-1 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={() => handleDelete(deleteConfirm)}
-                className="flex-1 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700"
-              >
-                Archive
-              </button>
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{t("common.cancel")}</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700">{t("products.archiveProduct")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Category Management Modal ── */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 flex-shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900">{t("products.categoriesTitle")}</h2>
+              <button onClick={() => { setShowCategoryModal(false); setCatError("") }} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
+            </div>
+            <div className="p-6 space-y-4 overflow-y-auto">
+              {catError && <FormError error={catError} />}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.addCategory")}</label>
+                <div className="flex gap-2">
+                  <input value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCatError("") }} placeholder={t("products.categoryName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <button onClick={handleAddCategory} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.add")}</button>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {categories.map((cat) => {
+                  const subs = subCategories.filter((s) => s.categoryId === cat.id)
+                  return (
+                    <div key={cat.id} className="rounded-lg border border-gray-200 p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-gray-900">{cat.name}</span>
+                        <button onClick={() => handleDeleteCategory(cat.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500" title={t("common.delete")}><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                      {subs.length > 0 && (
+                        <div className="mt-2 ml-4 space-y-1">
+                          {subs.map((sub) => (
+                            <div key={sub.id} className="flex items-center justify-between text-sm text-gray-600">
+                              <span>↳ {sub.name}</span>
+                              <button onClick={() => handleDeleteSubCategory(sub.id)} className="p-0.5 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 className="h-3 w-3" /></button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.addSubCategory")}</label>
+                <div className="flex gap-2">
+                  <select value={selectedCategoryForSub} onChange={(e) => setSelectedCategoryForSub(e.target.value)} className="w-1/3 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">{t("common.category")}</option>
+                    {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <input value={newSubCategoryName} onChange={(e) => { setNewSubCategoryName(e.target.value); setCatError("") }} placeholder={t("products.subCategoryName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <button onClick={handleAddSubCategory} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.add")}</button>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end border-t border-gray-100 px-6 py-4 flex-shrink-0">
+              <button onClick={() => { setShowCategoryModal(false); setCatError("") }} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{t("common.close")}</button>
             </div>
           </div>
         </div>

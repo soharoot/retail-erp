@@ -12,7 +12,7 @@ import { useTableData, insertChildRows, deleteChildRows } from "@/hooks/use-tabl
 import { useSettings } from "@/hooks/use-settings"
 import { PageHeader } from "@/components/layout/page-header"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import type { Sale, SaleItem, Product, InventoryItem, Customer } from "@/lib/types"
+import type { Sale, SaleItem, Product, InventoryItem, Customer, ProductVariation } from "@/lib/types"
 import {
   ShoppingCart, Plus, Trash2, Edit2, X, Printer, DollarSign,
   TrendingUp, ShoppingBag, AlertTriangle,
@@ -22,15 +22,21 @@ type PaymentMethod = "cash" | "card" | "transfer" | "check"
 type SaleStatus = "completed" | "pending" | "cancelled" | "refunded"
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
+  const labels: Record<string, string> = {
+    completed: "Complété",
+    pending: "En attente",
+    cancelled: "Annulé",
+    refunded: "Remboursé",
+  }
+  const colors: Record<string, string> = {
     completed: "bg-green-100 text-green-700",
     pending: "bg-yellow-100 text-yellow-700",
     cancelled: "bg-gray-100 text-gray-600",
     refunded: "bg-red-100 text-red-700",
   }
   return (
-    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${map[status] ?? "bg-gray-100 text-gray-600"}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${colors[status] ?? "bg-gray-100 text-gray-600"}`}>
+      {labels[status] ?? status}
     </span>
   )
 }
@@ -59,6 +65,7 @@ export default function SalesPage() {
   const { data: customers } = useTableData<Customer>("customers", {
     orderBy: { column: "name", ascending: true },
   })
+  const { data: variations, update: updateVariation, refresh: refreshVariations } = useTableData<ProductVariation>("product_variations")
   const [settings] = useSettings()
 
   // Tax rate from settings (stored as number, e.g. 10 for 10%)
@@ -77,8 +84,8 @@ export default function SalesPage() {
   const [formCustomerName, setFormCustomerName] = useState("")
   const [formPayment, setFormPayment] = useState<PaymentMethod>("cash")
   const [formStatus, setFormStatus] = useState<SaleStatus>("completed")
-  const [formItems, setFormItems] = useState<Array<{ productId: string; qty: string; price: string }>>([
-    { productId: "", qty: "1", price: "" },
+  const [formItems, setFormItems] = useState<Array<{ productId: string; variationId: string; qty: string; price: string }>>([
+    { productId: "", variationId: "", qty: "1", price: "" },
   ])
   const [stockError, setStockError] = useState<string | null>(null)
 
@@ -88,6 +95,14 @@ export default function SalesPage() {
 
   // Build inventory lookup by productId
   const inventoryByProduct = new Map(inventory.map((i) => [i.productId, i]))
+
+  // Build variations lookup by productId
+  const variationsByProduct = new Map<string, ProductVariation[]>()
+  for (const v of variations) {
+    const list = variationsByProduct.get(v.productId) ?? []
+    list.push(v)
+    variationsByProduct.set(v.productId, list)
+  }
 
   const filtered = sales.filter((s) => {
     const matchSearch =
@@ -108,7 +123,7 @@ export default function SalesPage() {
     setFormCustomerName("")
     setFormPayment("cash")
     setFormStatus("completed")
-    setFormItems([{ productId: "", qty: "1", price: "" }])
+    setFormItems([{ productId: "", variationId: "", qty: "1", price: "" }])
     setStockError(null)
     setShowModal(true)
   }
@@ -122,6 +137,7 @@ export default function SalesPage() {
     setFormItems(
       (sale.items ?? []).map((item) => ({
         productId: item.productId ?? "",
+        variationId: item.variationId ?? "",
         qty: String(item.quantity),
         price: String(item.unitPrice),
       }))
@@ -133,7 +149,7 @@ export default function SalesPage() {
   const handleCustomerChange = (customerId: string) => {
     if (customerId === "__walkin__") {
       setFormCustomerId(null)
-      setFormCustomerName("Walk-in Customer")
+      setFormCustomerName(t("sales.walkInCustomer"))
     } else {
       const cust = customers.find((c) => c.id === customerId)
       setFormCustomerId(customerId)
@@ -144,12 +160,12 @@ export default function SalesPage() {
   const handleProductChange = (idx: number, productId: string) => {
     const prod = products.find((p) => p.id === productId)
     const updated = [...formItems]
-    updated[idx] = { productId, qty: updated[idx].qty, price: prod ? String(prod.price) : "" }
+    updated[idx] = { productId, variationId: "", qty: updated[idx].qty, price: prod ? String(prod.price) : "" }
     setFormItems(updated)
   }
 
   const addItem = () =>
-    setFormItems([...formItems, { productId: "", qty: "1", price: "" }])
+    setFormItems([...formItems, { productId: "", variationId: "", qty: "1", price: "" }])
 
   const removeItem = (idx: number) => {
     if (formItems.length > 1) setFormItems(formItems.filter((_, i) => i !== idx))
@@ -162,6 +178,7 @@ export default function SalesPage() {
       return {
         productId: fi.productId,
         productName: prod?.name ?? "",
+        variationId: fi.variationId || null,
         quantity: parseInt(fi.qty) || 1,
         unitPrice: parseFloat(fi.price) || 0,
         costAtSale: prod?.cost ?? 0,
@@ -175,7 +192,7 @@ export default function SalesPage() {
 
   // ── Generate sale number ──────────────────────────────────
   const generateSaleNumber = () => {
-    const prefix = settings?.invoicePrefix ?? "SALE"
+    const prefix = settings?.invoicePrefix ?? "VENTE"
     const maxNum = sales.reduce((max, s) => {
       const match = (s.saleNumber ?? "").match(/(\d+)$/)
       return match ? Math.max(max, parseInt(match[1])) : max
@@ -188,30 +205,63 @@ export default function SalesPage() {
     setStockError(null)
     if (!formCustomerName.trim() || computedItems.length === 0) return
 
-    // Stock validation
+    // Stock validation — per-variation or per-inventory
     for (const item of computedItems) {
-      const invItem = inventoryByProduct.get(item.productId)
-      if (invItem) {
-        // When editing, add back the old quantities first
-        let available = invItem.stock
-        if (editingSale) {
-          const oldItem = (editingSale.items ?? []).find((oi) => oi.productId === item.productId)
-          if (oldItem) available += oldItem.quantity
+      if (item.variationId) {
+        // Variation stock check
+        const variation = variations.find((v) => v.id === item.variationId)
+        if (variation) {
+          let available = variation.stock
+          if (editingSale) {
+            const oldItem = (editingSale.items ?? []).find((oi) => oi.variationId === item.variationId)
+            if (oldItem) available += oldItem.quantity
+          }
+          if (available < item.quantity) {
+            setStockError(`Stock insuffisant pour "${item.productName}" — ${variation.variationType}: ${variation.variationValue} (disponible: ${available}, demandé: ${item.quantity})`)
+            return
+          }
         }
-        if (available < item.quantity) {
-          setStockError(`Not enough stock for "${item.productName}" (available: ${available}, requested: ${item.quantity})`)
-          return
+      } else {
+        // Inventory stock check
+        const invItem = inventoryByProduct.get(item.productId)
+        if (invItem) {
+          let available = invItem.stock
+          if (editingSale) {
+            const oldItem = (editingSale.items ?? []).find((oi) => oi.productId === item.productId && !oi.variationId)
+            if (oldItem) available += oldItem.quantity
+          }
+          if (available < item.quantity) {
+            setStockError(`Stock insuffisant pour "${item.productName}" (disponible: ${available}, demandé: ${item.quantity})`)
+            return
+          }
         }
+      }
+    }
+
+    // Check variations required
+    for (const fi of formItems) {
+      if (!fi.productId) continue
+      const prodVariations = variationsByProduct.get(fi.productId)
+      if (prodVariations && prodVariations.length > 0 && !fi.variationId) {
+        setStockError("Veuillez sélectionner une variation pour chaque produit qui en possède")
+        return
       }
     }
 
     if (editingSale) {
       // ── EDIT ──
-      // 1. Restore old inventory
+      // 1. Restore old stock (inventory + variations)
       for (const oldItem of editingSale.items ?? []) {
-        const inv = inventoryByProduct.get(oldItem.productId ?? "")
-        if (inv) {
-          await updateInventory(inv.id, { stock: inv.stock + oldItem.quantity } as Partial<InventoryItem>)
+        if (oldItem.variationId) {
+          const variation = variations.find((v) => v.id === oldItem.variationId)
+          if (variation) {
+            await updateVariation(variation.id, { stock: variation.stock + oldItem.quantity } as Partial<ProductVariation>)
+          }
+        } else {
+          const inv = inventoryByProduct.get(oldItem.productId ?? "")
+          if (inv) {
+            await updateInventory(inv.id, { stock: inv.stock + oldItem.quantity } as Partial<InventoryItem>)
+          }
         }
       }
 
@@ -232,19 +282,27 @@ export default function SalesPage() {
         saleId: editingSale.id,
         productId: item.productId || null,
         productName: item.productName,
+        variationId: item.variationId,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         costAtSale: item.costAtSale,
         lineTotal: item.lineTotal,
       })))
 
-      // 4. Deduct new inventory
+      // 4. Deduct new stock
       for (const item of computedItems) {
-        const inv = inventoryByProduct.get(item.productId)
-        if (inv) {
-          // Note: we already restored above, so current stock in DB is restored
-          const oldQty = editingSale.items?.find((oi) => oi.productId === item.productId)?.quantity ?? 0
-          await updateInventory(inv.id, { stock: Math.max(0, inv.stock - item.quantity + oldQty) } as Partial<InventoryItem>)
+        if (item.variationId) {
+          const variation = variations.find((v) => v.id === item.variationId)
+          if (variation) {
+            const oldQty = (editingSale.items ?? []).find((oi) => oi.variationId === item.variationId)?.quantity ?? 0
+            await updateVariation(variation.id, { stock: Math.max(0, variation.stock - item.quantity + oldQty) } as Partial<ProductVariation>)
+          }
+        } else {
+          const inv = inventoryByProduct.get(item.productId)
+          if (inv) {
+            const oldQty = (editingSale.items ?? []).find((oi) => oi.productId === item.productId && !oi.variationId)?.quantity ?? 0
+            await updateInventory(inv.id, { stock: Math.max(0, inv.stock - item.quantity + oldQty) } as Partial<InventoryItem>)
+          }
         }
       }
 
@@ -252,7 +310,7 @@ export default function SalesPage() {
         logAction({
           action: "sale.updated",
           module: "sales",
-          description: `Updated sale ${editingSale.saleNumber} for "${formCustomerName.trim()}" — total ${grandTotal.toFixed(2)}`,
+          description: `Vente ${editingSale.saleNumber} mise à jour pour "${formCustomerName.trim()}" — total ${formatCurrency(grandTotal)}`,
           userId: user.id,
           orgId,
           userName: user.email ?? undefined,
@@ -277,22 +335,30 @@ export default function SalesPage() {
       } as Partial<Sale>)
 
       if (created) {
-        // Insert sale items
+        // Insert sale items with variationId
         await insertChildRows("sale_items", computedItems.map((item) => ({
           saleId: created.id,
           productId: item.productId || null,
           productName: item.productName,
+          variationId: item.variationId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
           costAtSale: item.costAtSale,
           lineTotal: item.lineTotal,
         })))
 
-        // Deduct inventory
+        // Deduct stock
         for (const item of computedItems) {
-          const inv = inventoryByProduct.get(item.productId)
-          if (inv) {
-            await updateInventory(inv.id, { stock: Math.max(0, inv.stock - item.quantity) } as Partial<InventoryItem>)
+          if (item.variationId) {
+            const variation = variations.find((v) => v.id === item.variationId)
+            if (variation) {
+              await updateVariation(variation.id, { stock: Math.max(0, variation.stock - item.quantity) } as Partial<ProductVariation>)
+            }
+          } else {
+            const inv = inventoryByProduct.get(item.productId)
+            if (inv) {
+              await updateInventory(inv.id, { stock: Math.max(0, inv.stock - item.quantity) } as Partial<InventoryItem>)
+            }
           }
         }
 
@@ -300,7 +366,7 @@ export default function SalesPage() {
           logAction({
             action: "sale.created",
             module: "sales",
-            description: `Created sale ${saleNumber} for "${formCustomerName.trim()}" — ${computedItems.length} item(s), total ${grandTotal.toFixed(2)}`,
+            description: `Vente ${saleNumber} créée pour "${formCustomerName.trim()}" — ${computedItems.length} article(s), total ${formatCurrency(grandTotal)}`,
             userId: user.id,
             orgId,
             userName: user.email ?? undefined,
@@ -313,29 +379,37 @@ export default function SalesPage() {
     setShowModal(false)
     refreshSales()
     refreshInventory()
+    refreshVariations()
   }
 
   // ── delete ──────────────────────────────────────────────────
   const handleDelete = async (saleId: string) => {
     const sale = sales.find((s) => s.id === saleId)
     if (sale) {
-      // Restore inventory
+      // Restore stock (inventory + variations)
       for (const item of sale.items ?? []) {
-        const inv = inventoryByProduct.get(item.productId ?? "")
-        if (inv) {
-          await updateInventory(inv.id, { stock: inv.stock + item.quantity } as Partial<InventoryItem>)
+        if (item.variationId) {
+          const variation = variations.find((v) => v.id === item.variationId)
+          if (variation) {
+            await updateVariation(variation.id, { stock: variation.stock + item.quantity } as Partial<ProductVariation>)
+          }
+        } else {
+          const inv = inventoryByProduct.get(item.productId ?? "")
+          if (inv) {
+            await updateInventory(inv.id, { stock: inv.stock + item.quantity } as Partial<InventoryItem>)
+          }
         }
       }
 
       // Delete sale items then sale
       await deleteChildRows("sale_items", "saleId", saleId)
-      await removeSale(saleId, false) // hard delete
+      await removeSale(saleId, false)
 
       if (user?.id && orgId) {
         logAction({
           action: "sale.deleted",
           module: "sales",
-          description: `Deleted sale ${sale.saleNumber} (customer: "${sale.customerName}", total: ${(sale.total ?? 0).toFixed(2)})`,
+          description: `Vente ${sale.saleNumber} supprimée (client: "${sale.customerName}", total: ${formatCurrency(sale.total ?? 0)})`,
           userId: user.id,
           orgId,
           userName: user.email ?? undefined,
@@ -346,13 +420,14 @@ export default function SalesPage() {
 
     refreshSales()
     refreshInventory()
+    refreshVariations()
     setDeleteConfirm(null)
   }
 
   // ── print invoice ───────────────────────────────────────────
   const handlePrint = () => window.print()
 
-  const companyName = settings?.companyName || "Retail ERP Store"
+  const companyName = settings?.companyName || "ERP Algérie"
 
   return (
     <PageGuard permission={PERMISSIONS.SALES_VIEW}>
@@ -404,7 +479,7 @@ export default function SalesPage() {
             <option value="completed">{t("common.completed")}</option>
             <option value="pending">{t("common.pending")}</option>
             <option value="cancelled">{t("common.cancelled")}</option>
-            <option value="refunded">Refunded</option>
+            <option value="refunded">{t("sales.refunded")}</option>
           </select>
         </div>
       </div>
@@ -413,14 +488,14 @@ export default function SalesPage() {
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         {salesLoading ? (
           <div className="py-16 text-center">
-            <p className="text-gray-400">Loading sales...</p>
+            <p className="text-gray-400">{t("common.loading")}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <ShoppingCart className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">
-              {sales.length === 0 ? "Create your first sale to get started" : "Try adjusting your search or filter"}
+              {sales.length === 0 ? t("sales.createFirstSale") : t("common.noResults")}
             </p>
             {sales.length === 0 && (
               <button
@@ -436,8 +511,8 @@ export default function SalesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Sale #</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Date</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Vente #</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.date")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("sales.customer")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("sales.items")}</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("common.total")}</th>
@@ -452,11 +527,15 @@ export default function SalesPage() {
                     <td className="px-4 py-3 font-mono text-xs font-medium text-gray-900">{sale.saleNumber}</td>
                     <td className="px-4 py-3 text-gray-500">{formatDate(sale.date)}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">{sale.customerName}</td>
-                    <td className="px-4 py-3 text-gray-500">{(sale.items ?? []).length} item{(sale.items ?? []).length !== 1 ? "s" : ""}</td>
+                    <td className="px-4 py-3 text-gray-500">{(sale.items ?? []).length} article{(sale.items ?? []).length !== 1 ? "s" : ""}</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(sale.total)}</td>
                     <td className="px-4 py-3 text-center">
                       <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 capitalize">
-                        {sale.paymentMethod}
+                        {sale.paymentMethod === "cash" ? t("sales.cash") :
+                         sale.paymentMethod === "card" ? t("sales.card") :
+                         sale.paymentMethod === "transfer" ? t("sales.transfer") :
+                         sale.paymentMethod === "check" ? t("sales.check") :
+                         sale.paymentMethod}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center"><StatusBadge status={sale.status} /></td>
@@ -497,20 +576,20 @@ export default function SalesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Customer *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("sales.customer")} *</label>
                   <select
                     value={formCustomerId ?? "__walkin__"}
                     onChange={(e) => handleCustomerChange(e.target.value)}
                     className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   >
-                    <option value="__walkin__">Walk-in Customer</option>
+                    <option value="__walkin__">{t("sales.walkInCustomer")}</option>
                     {activeCustomers.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}{c.company ? ` (${c.company})` : ""}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Method</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("sales.payment")}</label>
                   <select
                     value={formPayment}
                     onChange={(e) => setFormPayment(e.target.value as PaymentMethod)}
@@ -523,7 +602,7 @@ export default function SalesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.status")}</label>
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as SaleStatus)}
@@ -532,7 +611,7 @@ export default function SalesPage() {
                     <option value="completed">{t("common.completed")}</option>
                     <option value="pending">{t("common.pending")}</option>
                     <option value="cancelled">{t("common.cancelled")}</option>
-                    <option value="refunded">Refunded</option>
+                    <option value="refunded">{t("sales.refunded")}</option>
                   </select>
                 </div>
               </div>
@@ -540,7 +619,7 @@ export default function SalesPage() {
               {/* Items */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">Items *</label>
+                  <label className="block text-sm font-medium text-gray-700">{t("sales.items")} *</label>
                   <button
                     onClick={addItem}
                     className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
@@ -550,76 +629,105 @@ export default function SalesPage() {
                 </div>
                 <div className="space-y-2">
                   {formItems.map((fi, idx) => {
+                    const prodVariations = variationsByProduct.get(fi.productId) ?? []
                     const invItem = inventoryByProduct.get(fi.productId)
                     return (
-                      <div key={idx} className="grid grid-cols-12 gap-2 items-end">
-                        <div className="col-span-5">
-                          {idx === 0 && <p className="text-xs text-gray-500 mb-1">{t("sales.productName")}</p>}
-                          <select
-                            value={fi.productId}
-                            onChange={(e) => handleProductChange(idx, e.target.value)}
-                            className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          >
-                            <option value="">Select product</option>
-                            {activeProducts.map((p) => {
-                              const inv = inventoryByProduct.get(p.id)
-                              return (
-                                <option key={p.id} value={p.id}>
-                                  {p.name} {inv ? `(${inv.stock} in stock)` : ""}
-                                </option>
-                              )
-                            })}
-                          </select>
-                          {invItem && (
-                            <p className="text-xs text-gray-400 mt-0.5">Stock: {invItem.stock}</p>
-                          )}
-                        </div>
-                        <div className="col-span-2">
-                          {idx === 0 && <p className="text-xs text-gray-500 mb-1">{t("common.quantity")}</p>}
-                          <input
-                            type="number"
-                            min="1"
-                            value={fi.qty}
-                            onChange={(e) => {
-                              const updated = [...formItems]
-                              updated[idx] = { ...updated[idx], qty: e.target.value }
-                              setFormItems(updated)
-                            }}
-                            className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                        <div className="col-span-3">
-                          {idx === 0 && <p className="text-xs text-gray-500 mb-1">{t("sales.unitPrice")}</p>}
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={fi.price}
-                            onChange={(e) => {
-                              const updated = [...formItems]
-                              updated[idx] = { ...updated[idx], price: e.target.value }
-                              setFormItems(updated)
-                            }}
-                            className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
-                        <div className="col-span-1">
-                          {idx === 0 && <div className="mb-1 h-4" />}
-                          <div className="text-xs text-gray-600 text-right py-2">
-                            {fi.productId && fi.qty && fi.price
-                              ? formatCurrency((parseInt(fi.qty) || 0) * (parseFloat(fi.price) || 0))
-                              : "—"}
+                      <div key={idx} className="space-y-2 p-3 rounded-lg bg-gray-50 border border-gray-100">
+                        <div className="grid grid-cols-12 gap-2 items-end">
+                          <div className="col-span-5">
+                            {idx === 0 && <p className="text-xs text-gray-500 mb-1">{t("sales.productName")}</p>}
+                            <select
+                              value={fi.productId}
+                              onChange={(e) => handleProductChange(idx, e.target.value)}
+                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="">{t("sales.selectProduct")}</option>
+                              {activeProducts.map((p) => {
+                                const pVars = variationsByProduct.get(p.id)
+                                const inv = inventoryByProduct.get(p.id)
+                                const stockInfo = pVars && pVars.length > 0
+                                  ? `(${pVars.reduce((s, v) => s + v.stock, 0)} en stock)`
+                                  : inv ? `(${inv.stock} en stock)` : ""
+                                return (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name} {stockInfo}
+                                  </option>
+                                )
+                              })}
+                            </select>
+                            {fi.productId && !prodVariations.length && invItem && (
+                              <p className="text-xs text-gray-400 mt-0.5">Stock: {invItem.stock}</p>
+                            )}
+                          </div>
+                          <div className="col-span-2">
+                            {idx === 0 && <p className="text-xs text-gray-500 mb-1">{t("common.quantity")}</p>}
+                            <input
+                              type="number"
+                              min="1"
+                              value={fi.qty}
+                              onChange={(e) => {
+                                const updated = [...formItems]
+                                updated[idx] = { ...updated[idx], qty: e.target.value }
+                                setFormItems(updated)
+                              }}
+                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div className="col-span-3">
+                            {idx === 0 && <p className="text-xs text-gray-500 mb-1">{t("sales.unitPrice")}</p>}
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={fi.price}
+                              onChange={(e) => {
+                                const updated = [...formItems]
+                                updated[idx] = { ...updated[idx], price: e.target.value }
+                                setFormItems(updated)
+                              }}
+                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                          </div>
+                          <div className="col-span-1">
+                            {idx === 0 && <div className="mb-1 h-4" />}
+                            <div className="text-xs text-gray-600 text-right py-2">
+                              {fi.productId && fi.qty && fi.price
+                                ? formatCurrency((parseInt(fi.qty) || 0) * (parseFloat(fi.price) || 0))
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="col-span-1">
+                            {idx === 0 && <div className="mb-1 h-4" />}
+                            <button
+                              onClick={() => removeItem(idx)}
+                              disabled={formItems.length === 1}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </div>
-                        <div className="col-span-1">
-                          {idx === 0 && <div className="mb-1 h-4" />}
-                          <button
-                            onClick={() => removeItem(idx)}
-                            disabled={formItems.length === 1}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
+                        {/* Variation dropdown */}
+                        {prodVariations.length > 0 && (
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">{t("sales.selectVariation")}</label>
+                            <select
+                              value={fi.variationId}
+                              onChange={(e) => {
+                                const updated = [...formItems]
+                                updated[idx] = { ...updated[idx], variationId: e.target.value }
+                                setFormItems(updated)
+                              }}
+                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="">{t("sales.selectVariation")}</option>
+                              {prodVariations.map((v) => (
+                                <option key={v.id} value={v.id}>
+                                  {v.variationType}: {v.variationValue} (stock: {v.stock})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -677,7 +785,7 @@ export default function SalesPage() {
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-lg font-semibold text-gray-900">{t("sales.invoice")}</h2>
               <div className="flex gap-2">
-                <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"><Printer className="h-4 w-4" /> Print</button>
+                <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"><Printer className="h-4 w-4" /> {t("common.print")}</button>
                 <button onClick={() => setPrintSale(null)} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
               </div>
             </div>
@@ -689,36 +797,42 @@ export default function SalesPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <div>
-                  <p className="text-gray-500">Invoice #</p>
+                  <p className="text-gray-500">Facture N°</p>
                   <p className="font-semibold text-gray-900">{printSale.saleNumber}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-gray-500">Date</p>
+                  <p className="text-gray-500">{t("common.date")}</p>
                   <p className="font-semibold text-gray-900">{formatDate(printSale.date)}</p>
                 </div>
               </div>
               <div className="text-sm border-t pt-3">
-                <p className="text-gray-500">Bill To</p>
+                <p className="text-gray-500">{t("sales.customer")}</p>
                 <p className="font-semibold text-gray-900 mt-0.5">{printSale.customerName}</p>
               </div>
               <table className="w-full text-sm border-t pt-4">
                 <thead>
                   <tr className="border-b">
-                    <th className="text-left py-2 text-gray-500">Item</th>
-                    <th className="text-right py-2 text-gray-500">Qty</th>
-                    <th className="text-right py-2 text-gray-500">Price</th>
-                    <th className="text-right py-2 text-gray-500">Total</th>
+                    <th className="text-left py-2 text-gray-500">Article</th>
+                    <th className="text-right py-2 text-gray-500">Qté</th>
+                    <th className="text-right py-2 text-gray-500">Prix</th>
+                    <th className="text-right py-2 text-gray-500">{t("common.total")}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(printSale.items ?? []).map((item, i) => (
-                    <tr key={i} className="border-b border-gray-100">
-                      <td className="py-2">{item.productName}</td>
-                      <td className="text-right py-2">{item.quantity}</td>
-                      <td className="text-right py-2">{formatCurrency(item.unitPrice)}</td>
-                      <td className="text-right py-2 font-medium">{formatCurrency(item.lineTotal)}</td>
-                    </tr>
-                  ))}
+                  {(printSale.items ?? []).map((item, i) => {
+                    const variation = item.variationId ? variations.find((v) => v.id === item.variationId) : null
+                    return (
+                      <tr key={i} className="border-b border-gray-100">
+                        <td className="py-2">
+                          {item.productName}
+                          {variation && <span className="text-xs text-indigo-600 ml-1">({variation.variationType}: {variation.variationValue})</span>}
+                        </td>
+                        <td className="text-right py-2">{item.quantity}</td>
+                        <td className="text-right py-2">{formatCurrency(item.unitPrice)}</td>
+                        <td className="text-right py-2 font-medium">{formatCurrency(item.lineTotal)}</td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
                 <tfoot>
                   <tr><td colSpan={3} className="pt-2 text-right text-gray-500">{t("sales.subtotal")}</td><td className="pt-2 text-right">{formatCurrency(printSale.subtotal)}</td></tr>
@@ -730,8 +844,20 @@ export default function SalesPage() {
                 </tfoot>
               </table>
               <div className="text-center text-xs text-gray-400 border-t pt-4">
-                Payment: <span className="capitalize font-medium">{printSale.paymentMethod}</span> &nbsp;|&nbsp;
-                Status: <span className="capitalize font-medium">{printSale.status}</span>
+                Paiement: <span className="capitalize font-medium">
+                  {printSale.paymentMethod === "cash" ? t("sales.cash") :
+                   printSale.paymentMethod === "card" ? t("sales.card") :
+                   printSale.paymentMethod === "transfer" ? t("sales.transfer") :
+                   printSale.paymentMethod === "check" ? t("sales.check") :
+                   printSale.paymentMethod}
+                </span> &nbsp;|&nbsp;
+                {t("common.status")}: <span className="capitalize font-medium">
+                  {printSale.status === "completed" ? t("common.completed") :
+                   printSale.status === "pending" ? t("common.pending") :
+                   printSale.status === "cancelled" ? t("common.cancelled") :
+                   printSale.status === "refunded" ? t("sales.refunded") :
+                   printSale.status}
+                </span>
               </div>
             </div>
           </div>

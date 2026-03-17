@@ -3,7 +3,7 @@
 import { PageGuard } from "@/components/shared/permission-guard"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useI18n } from "@/lib/i18n/context"
 import { useAuth } from "@/lib/supabase/auth-context"
 import { useRBAC } from "@/lib/rbac/rbac-context"
@@ -13,13 +13,27 @@ import { PageHeader } from "@/components/layout/page-header"
 import { FormError } from "@/components/shared/form-error"
 import { validateStockAdjustment } from "@/lib/validation"
 import { formatCurrency } from "@/lib/utils"
-import type { InventoryItem, Product } from "@/lib/types"
+import type { InventoryItem, Product, Category, SubCategory, ProductVariation } from "@/lib/types"
 import { Warehouse, AlertTriangle, X, TrendingUp, TrendingDown } from "lucide-react"
 
-function stockStatus(stock: number, minStock: number, labels: { outOfStock: string; lowStock: string; inStock: string }) {
-  if (stock === 0) return { label: labels.outOfStock, color: "bg-red-100 text-red-700" }
-  if (stock <= minStock) return { label: labels.lowStock, color: "bg-yellow-100 text-yellow-700" }
-  return { label: labels.inStock, color: "bg-green-100 text-green-700" }
+interface InventoryRow {
+  id: string
+  productId: string
+  productName: string
+  categoryName: string
+  subCategoryName: string
+  variationLabel: string       // e.g. "Taille: S" or ""
+  variationId: string | null
+  stock: number
+  minStock: number
+  sellingPrice: number
+  isVariation: boolean         // true = product_variations row, false = inventory row
+}
+
+function stockStatus(stock: number, minStock: number) {
+  if (stock === 0) return { label: "Rupture de stock", color: "bg-red-100 text-red-700" }
+  if (stock <= minStock) return { label: "Stock bas", color: "bg-yellow-100 text-yellow-700" }
+  return { label: "En stock", color: "bg-green-100 text-green-700" }
 }
 
 export default function InventoryPage() {
@@ -35,54 +49,102 @@ export default function InventoryPage() {
   } = useTableData<InventoryItem>("inventory")
 
   const { data: products, loading: productsLoading } = useTableData<Product>("products")
+  const { data: categories } = useTableData<Category>("categories")
+  const { data: subCategories } = useTableData<SubCategory>("sub_categories")
+  const { data: variations, update: updateVariation, refresh: refreshVariations } = useTableData<ProductVariation>("product_variations")
 
   const [search, setSearch] = useState("")
   const [filterStatus, setFilterStatus] = useState("")
-  const [adjustItem, setAdjustItem] = useState<InventoryItem | null>(null)
+  const [adjustItem, setAdjustItem] = useState<InventoryRow | null>(null)
   const [adjustAmount, setAdjustAmount] = useState("")
   const [adjustReason, setAdjustReason] = useState("")
   const [adjustError, setAdjustError] = useState("")
 
-  // ── Build product lookup map ──────────────────────────────
+  // ── Build lookup maps ──────────────────────────────────
   const productMap = new Map(products.map((p) => [p.id, p]))
+  const categoryMap = new Map(categories.map((c) => [c.id, c]))
+  const subCategoryMap = new Map(subCategories.map((sc) => [sc.id, sc]))
 
-  // Enrich inventory items with product data
-  const enrichedInventory = inventory.map((item) => {
-    const prod = productMap.get(item.productId)
-    return {
-      ...item,
-      productName: prod?.name ?? "Unknown Product",
-      category: prod?.category ?? "",
-      cost: prod?.cost ?? 0,
-    }
-  })
-
-  // ── derived ────────────────────────────────────────────────
-  const stockLabels = {
-    outOfStock: t("inventory.outOfStock"),
-    lowStock: t("inventory.lowStockStatus"),
-    inStock: t("inventory.inStock"),
+  // Build variations by product
+  const variationsByProduct = new Map<string, ProductVariation[]>()
+  for (const v of variations) {
+    const list = variationsByProduct.get(v.productId) ?? []
+    list.push(v)
+    variationsByProduct.set(v.productId, list)
   }
 
-  const filtered = enrichedInventory.filter((item) => {
+  // ── Merge data: inventory + product_variations ──────────
+  const rows = useMemo<InventoryRow[]>(() => {
+    const result: InventoryRow[] = []
+    const processedProductIds = new Set<string>()
+
+    // Active products only
+    const activeProducts = products.filter((p) => p.status === "active" && !p.deletedAt)
+
+    for (const product of activeProducts) {
+      processedProductIds.add(product.id)
+      const cat = product.categoryId ? categoryMap.get(product.categoryId) : null
+      const subCat = product.subCategoryId ? subCategoryMap.get(product.subCategoryId) : null
+      const prodVariations = variationsByProduct.get(product.id)
+
+      if (prodVariations && prodVariations.length > 0) {
+        // Product with variations → one row per variation
+        for (const v of prodVariations) {
+          result.push({
+            id: v.id,
+            productId: product.id,
+            productName: product.name,
+            categoryName: cat?.name ?? product.category ?? "",
+            subCategoryName: subCat?.name ?? "",
+            variationLabel: `${v.variationType}: ${v.variationValue}`,
+            variationId: v.id,
+            stock: v.stock,
+            minStock: 5, // default min for variations
+            sellingPrice: product.price,
+            isVariation: true,
+          })
+        }
+      } else {
+        // Product without variations → one row from inventory
+        const inv = inventory.find((i) => i.productId === product.id)
+        result.push({
+          id: inv?.id ?? product.id,
+          productId: product.id,
+          productName: product.name,
+          categoryName: cat?.name ?? product.category ?? "",
+          subCategoryName: subCat?.name ?? "",
+          variationLabel: "",
+          variationId: null,
+          stock: inv?.stock ?? 0,
+          minStock: inv?.minStock ?? 10,
+          sellingPrice: product.price,
+          isVariation: false,
+        })
+      }
+    }
+
+    return result
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, inventory, variations, categories, subCategories])
+
+  // ── Filtering ────────────────────────────────────────────
+  const filtered = rows.filter((item) => {
     const matchesSearch =
       item.productName.toLowerCase().includes(search.toLowerCase()) ||
-      item.category.toLowerCase().includes(search.toLowerCase())
+      item.categoryName.toLowerCase().includes(search.toLowerCase()) ||
+      item.variationLabel.toLowerCase().includes(search.toLowerCase())
     if (!matchesSearch) return false
     if (!filterStatus || filterStatus === t("common.all")) return true
-    const { label } = stockStatus(item.stock, item.minStock, stockLabels)
+    const { label } = stockStatus(item.stock, item.minStock)
     return label === filterStatus
-  })
+    })
 
-  const totalItems = inventory.length
-  const totalUnits = inventory.reduce((s, i) => s + (i.stock ?? 0), 0)
-  const lowStockCount = inventory.filter((i) => (i.stock ?? 0) > 0 && (i.stock ?? 0) <= (i.minStock ?? 10)).length
-  const outOfStockCount = inventory.filter((i) => (i.stock ?? 0) === 0).length
-
-  const inventoryValue = enrichedInventory.reduce(
-    (sum, item) => sum + (item.stock ?? 0) * item.cost,
-    0
-  )
+  // ── KPIs ────────────────────────────────────────────────
+  const totalItems = rows.length
+  const totalUnits = rows.reduce((s, i) => s + i.stock, 0)
+  const lowStockCount = rows.filter((i) => i.stock > 0 && i.stock <= i.minStock).length
+  const outOfStockCount = rows.filter((i) => i.stock === 0).length
+  const inventoryValue = rows.reduce((sum, item) => sum + item.stock * item.sellingPrice, 0)
 
   const loading = inventoryLoading || productsLoading
 
@@ -93,27 +155,37 @@ export default function InventoryPage() {
 
     const validation = validateStockAdjustment(delta, adjustItem.stock)
     if (!validation.valid) {
-      setAdjustError(validation.errors.adjustment ?? "Invalid adjustment")
+      setAdjustError(validation.errors.adjustment ?? "Ajustement invalide")
       return
     }
 
     const newStock = adjustItem.stock + delta
-    await updateInventory(adjustItem.id, { stock: newStock } as Partial<InventoryItem>)
 
-    const prod = productMap.get(adjustItem.productId)
+    if (adjustItem.isVariation && adjustItem.variationId) {
+      // Update product_variations.stock
+      await updateVariation(adjustItem.variationId, { stock: newStock } as Partial<ProductVariation>)
+    } else {
+      // Update inventory.stock
+      const inv = inventory.find((i) => i.productId === adjustItem.productId)
+      if (inv) {
+        await updateInventory(inv.id, { stock: newStock } as Partial<InventoryItem>)
+      }
+    }
+
     if (user?.id && orgId) {
       logAction({
         action: "inventory.adjusted",
         module: "inventory",
-        description: `Adjusted stock of "${prod?.name ?? "Unknown"}": ${adjustItem.stock} → ${newStock} (${delta > 0 ? "+" : ""}${delta})${adjustReason ? ` — ${adjustReason}` : ""}`,
+        description: `Stock de "${adjustItem.productName}"${adjustItem.variationLabel ? ` (${adjustItem.variationLabel})` : ""} ajusté: ${adjustItem.stock} → ${newStock} (${delta > 0 ? "+" : ""}${delta})${adjustReason ? ` — ${adjustReason}` : ""}`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
-        metadata: { product: prod?.name, product_id: adjustItem.productId, old_stock: adjustItem.stock, new_stock: newStock, delta, reason: adjustReason },
+        metadata: { product: adjustItem.productName, variation: adjustItem.variationLabel, product_id: adjustItem.productId, old_stock: adjustItem.stock, new_stock: newStock, delta, reason: adjustReason },
       })
     }
 
     refreshInventory()
+    refreshVariations()
     setAdjustItem(null)
     setAdjustAmount("")
     setAdjustReason("")
@@ -132,7 +204,7 @@ export default function InventoryPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: t("inventory.totalItems"), value: totalItems, icon: Warehouse, color: "text-indigo-600 bg-indigo-50" },
-          { label: t("inventory.totalUnits"), value: totalUnits.toLocaleString(), icon: Warehouse, color: "text-blue-600 bg-blue-50" },
+          { label: t("inventory.totalUnits"), value: totalUnits.toLocaleString("fr-FR"), icon: Warehouse, color: "text-blue-600 bg-blue-50" },
           { label: t("inventory.lowStockAlerts"), value: lowStockCount + outOfStockCount, icon: AlertTriangle, color: "text-yellow-600 bg-yellow-50" },
           { label: t("inventory.inventoryValue"), value: formatCurrency(inventoryValue), icon: Warehouse, color: "text-green-600 bg-green-50" },
         ].map((kpi) => (
@@ -166,9 +238,9 @@ export default function InventoryPage() {
             className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           >
             <option value={t("common.all")}>{t("common.all")}</option>
-            <option value={t("inventory.inStock")}>{t("inventory.inStock")}</option>
-            <option value={t("inventory.lowStockStatus")}>{t("inventory.lowStockStatus")}</option>
-            <option value={t("inventory.outOfStock")}>{t("inventory.outOfStock")}</option>
+            <option value="En stock">{t("inventory.inStock")}</option>
+            <option value="Stock bas">{t("inventory.lowStockStatus")}</option>
+            <option value="Rupture de stock">{t("inventory.outOfStock")}</option>
           </select>
         </div>
       </div>
@@ -177,16 +249,16 @@ export default function InventoryPage() {
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         {loading ? (
           <div className="py-16 text-center">
-            <p className="text-gray-400">Loading inventory...</p>
+            <p className="text-gray-400">{t("common.loading")}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <Warehouse className="mx-auto h-12 w-12 text-gray-300 mb-3" />
             <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">
-              {inventory.length === 0
-                ? "Add products first — inventory entries are created automatically"
-                : "Try adjusting your search or filter"}
+              {rows.length === 0
+                ? t("inventory.addProductsFirst")
+                : t("inventory.adjustSearchFilter")}
             </p>
           </div>
         ) : (
@@ -195,33 +267,50 @@ export default function InventoryPage() {
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("inventory.product")}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Category</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.category")}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.subCategory")}</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.variation")}</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("inventory.stock")}</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("inventory.minStock")}</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("inventory.lastUpdated")}</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("inventory.sellingPrice")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.status")}</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((item) => {
-                  const { label, color } = stockStatus(item.stock, item.minStock, stockLabels)
+                  const { label, color } = stockStatus(item.stock, item.minStock)
                   const pct = item.minStock > 0
                     ? Math.min(100, Math.round((item.stock / (item.minStock * 3)) * 100))
                     : 100
                   const barColor =
-                    label === stockLabels.outOfStock ? "bg-red-500" :
-                    label === stockLabels.lowStock ? "bg-yellow-500" : "bg-green-500"
+                    label === "Rupture de stock" ? "bg-red-500" :
+                    label === "Stock bas" ? "bg-yellow-500" : "bg-green-500"
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                    <tr key={`${item.id}-${item.variationId ?? "inv"}`} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3">
                         <p className="font-medium text-gray-900">{item.productName}</p>
                       </td>
                       <td className="px-4 py-3">
-                        {item.category && (
+                        {item.categoryName && (
                           <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
-                            {item.category}
+                            {item.categoryName}
                           </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.subCategoryName && (
+                          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                            {item.subCategoryName}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {item.variationLabel ? (
+                          <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+                            {item.variationLabel}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -232,12 +321,11 @@ export default function InventoryPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-500">{item.minStock}</td>
+                      <td className="px-4 py-3 text-right font-medium text-gray-900">
+                        {formatCurrency(item.sellingPrice)}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${color}`}>{label}</span>
-                      </td>
-                      <td className="px-4 py-3 text-center text-gray-500 text-xs">
-                        {item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString() : "—"}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button
@@ -271,16 +359,17 @@ export default function InventoryPage() {
             </div>
             <div className="p-6 space-y-4">
               <div className="rounded-lg bg-gray-50 p-3">
-                <p className="font-medium text-gray-900">
-                  {productMap.get(adjustItem.productId)?.name ?? "Unknown Product"}
-                </p>
-                <p className="text-sm text-gray-500 mt-0.5">Current stock: <strong>{adjustItem.stock}</strong></p>
+                <p className="font-medium text-gray-900">{adjustItem.productName}</p>
+                {adjustItem.variationLabel && (
+                  <p className="text-sm text-indigo-600 mt-0.5">{adjustItem.variationLabel}</p>
+                )}
+                <p className="text-sm text-gray-500 mt-0.5">{t("inventory.currentStock")} : <strong>{adjustItem.stock}</strong></p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   {t("inventory.adjustmentAmount")}
                 </label>
-                <p className="text-xs text-gray-400 mb-2">Use positive (+) to add stock, negative (-) to remove</p>
+                <p className="text-xs text-gray-400 mb-2">{t("inventory.adjustHint")}</p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setAdjustAmount(String((parseInt(adjustAmount) || 0) - 1))}
@@ -304,7 +393,7 @@ export default function InventoryPage() {
                 </div>
                 {adjustAmount && !adjustError && (
                   <p className="text-xs text-indigo-600 mt-1.5">
-                    New stock: {Math.max(0, adjustItem.stock + (parseInt(adjustAmount) || 0))}
+                    {t("inventory.newStock")} : {Math.max(0, adjustItem.stock + (parseInt(adjustAmount) || 0))}
                   </p>
                 )}
                 <FormError error={adjustError} />
@@ -315,7 +404,7 @@ export default function InventoryPage() {
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="e.g. Physical count correction"
+                  placeholder="ex: Correction après inventaire physique"
                 />
               </div>
             </div>

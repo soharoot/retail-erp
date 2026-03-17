@@ -5,8 +5,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Module-level currency — updated by i18n context when settings load
-let _currency = "USD"
+// Module-level currency — fixed to DZD for Algeria
+let _currency = "DZD"
 export function setCurrency(currency: string) {
   _currency = currency || "USD"
 }
@@ -39,7 +39,7 @@ export function formatNumber(num: number): string {
 }
 
 export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat("fr-FR", {
     year: "numeric",
     month: "short",
     day: "numeric",
@@ -47,9 +47,9 @@ export function formatDate(date: string | Date): string {
 }
 
 export function formatDateShort(date: string | Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "numeric",
+  return new Intl.DateTimeFormat("fr-FR", {
     day: "numeric",
+    month: "numeric",
     year: "numeric",
   }).format(new Date(date))
 }
@@ -94,7 +94,7 @@ export function lastNMonths(n: number): { label: string; key: string }[] {
   for (let i = n - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     result.push({
-      label: d.toLocaleString("default", { month: "short" }),
+      label: d.toLocaleString("fr-FR", { month: "short" }),
       key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
     })
   }

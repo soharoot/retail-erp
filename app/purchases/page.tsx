@@ -14,14 +14,20 @@ import { PageHeader } from "@/components/layout/page-header"
 import { FormError } from "@/components/shared/form-error"
 import { validatePurchase, validatePayment } from "@/lib/validation"
 import { formatCurrency, formatDate } from "@/lib/utils"
-import type { PurchaseOrder, PurchaseItem, Supplier, Product, InventoryItem, SupplierDebt } from "@/lib/types"
+import type { PurchaseOrder, PurchaseItem, Supplier, Product, InventoryItem, SupplierDebt, ProductVariation } from "@/lib/types"
 import {
   ClipboardList, Clock, DollarSign, PackageCheck, X, Eye, Trash2,
   Plus, Minus, CreditCard, AlertTriangle,
 } from "lucide-react"
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
+  const labels: Record<string, string> = {
+    pending: "En attente",
+    approved: "Approuvé",
+    received: "Reçu",
+    cancelled: "Annulé",
+  }
+  const colors: Record<string, string> = {
     pending: "bg-yellow-100 text-yellow-700",
     approved: "bg-blue-100 text-blue-700",
     received: "bg-green-100 text-green-700",
@@ -29,8 +35,8 @@ function StatusBadge({ status }: { status: string }) {
   }
   const safe = status ?? "pending"
   return (
-    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${map[safe] ?? "bg-gray-100 text-gray-600"}`}>
-      {safe.charAt(0).toUpperCase() + safe.slice(1)}
+    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${colors[safe] ?? "bg-gray-100 text-gray-600"}`}>
+      {labels[safe] ?? safe}
     </span>
   )
 }
@@ -38,6 +44,7 @@ function StatusBadge({ status }: { status: string }) {
 interface FormItem {
   productId: string
   productName: string
+  variationId: string
   quantity: string
   unitCost: string
 }
@@ -60,9 +67,10 @@ export default function PurchasesPage() {
   })
 
   const { data: suppliers } = useTableData<Supplier>("suppliers")
-  const { data: products } = useTableData<Product>("products")
+  const { data: products, update: updateProduct } = useTableData<Product>("products")
   const { data: inventory, update: updateInventory, insert: insertInventory } = useTableData<InventoryItem>("inventory")
-  const { insert: insertDebt, update: updateDebt } = useTableData<SupplierDebt>("supplier_debts", { manual: true })
+  const { data: variations, update: updateVariation, refresh: refreshVariations } = useTableData<ProductVariation>("product_variations")
+  const { insert: insertDebt } = useTableData<SupplierDebt>("supplier_debts", { manual: true })
 
   const [search, setSearch] = useState("")
   const [activeTab, setActiveTab] = useState("all")
@@ -74,7 +82,7 @@ export default function PurchasesPage() {
   // Form state
   const [formSupplierId, setFormSupplierId] = useState("")
   const [formItems, setFormItems] = useState<FormItem[]>([
-    { productId: "", productName: "", quantity: "1", unitCost: "" },
+    { productId: "", productName: "", variationId: "", quantity: "1", unitCost: "" },
   ])
   const [formAmountPaid, setFormAmountPaid] = useState("0")
   const [formExpectedDate, setFormExpectedDate] = useState("")
@@ -86,10 +94,18 @@ export default function PurchasesPage() {
   const [paymentError, setPaymentError] = useState("")
 
   const activeSuppliers = suppliers.filter((s) => s.status === "active")
-  const activeProducts = products.filter((p) => p.status === "active")
+  const activeProducts = products.filter((p) => p.status === "active" && !p.deletedAt)
 
   // Build inventory lookup
   const inventoryByProduct = new Map(inventory.map((i) => [i.productId, i]))
+
+  // Build variations lookup by productId
+  const variationsByProduct = new Map<string, ProductVariation[]>()
+  for (const v of variations) {
+    const list = variationsByProduct.get(v.productId) ?? []
+    list.push(v)
+    variationsByProduct.set(v.productId, list)
+  }
 
   // ── Form item helpers ────────────────────────────────────
   const updateItem = (idx: number, field: keyof FormItem, value: string) => {
@@ -100,8 +116,11 @@ export default function PurchasesPage() {
         const prod = products.find((p) => p.id === value)
         if (prod) {
           updated.productName = prod.name
-          updated.unitCost = String(prod.cost)
+          // Do NOT auto-fill unitCost — cost is entered per purchase
+          updated.unitCost = ""
         }
+        // Reset variation when product changes
+        updated.variationId = ""
       }
       return updated
     }))
@@ -109,7 +128,7 @@ export default function PurchasesPage() {
   }
 
   const addItem = () => {
-    setFormItems((prev) => [...prev, { productId: "", productName: "", quantity: "1", unitCost: "" }])
+    setFormItems((prev) => [...prev, { productId: "", productName: "", variationId: "", quantity: "1", unitCost: "" }])
   }
 
   const removeItem = (idx: number) => {
@@ -126,7 +145,7 @@ export default function PurchasesPage() {
 
   const resetForm = () => {
     setFormSupplierId("")
-    setFormItems([{ productId: "", productName: "", quantity: "1", unitCost: "" }])
+    setFormItems([{ productId: "", productName: "", variationId: "", quantity: "1", unitCost: "" }])
     setFormAmountPaid("0")
     setFormExpectedDate("")
     setFormErrors({})
@@ -134,9 +153,9 @@ export default function PurchasesPage() {
 
   // ── Tabs & filtering ─────────────────────────────────────
   const tabs = [
-    { id: "all", label: "All Orders" },
-    { id: "pending", label: "Pending" },
-    { id: "received", label: "Received" },
+    { id: "all", label: t("purchases.allOrders") },
+    { id: "pending", label: t("common.pending") },
+    { id: "received", label: t("purchases.received") },
   ]
 
   const tabFiltered =
@@ -171,6 +190,15 @@ export default function PurchasesPage() {
       return
     }
 
+    // Check variation required
+    for (const item of validItems) {
+      const prodVariations = variationsByProduct.get(item.productId)
+      if (prodVariations && prodVariations.length > 0 && !item.variationId) {
+        setFormErrors({ items: "Veuillez sélectionner une variation pour chaque produit qui en possède" })
+        return
+      }
+    }
+
     const supplier = suppliers.find((s) => s.id === formSupplierId)
     if (!supplier) return
 
@@ -203,30 +231,49 @@ export default function PurchasesPage() {
 
     if (!newOrder) return
 
-    // Insert purchase items
+    // Insert purchase items (with variationId)
     const itemRows = validItems.map((i) => ({
       purchaseOrderId: newOrder.id,
       productId: i.productId,
-      productName: i.productName || products.find((p) => p.id === i.productId)?.name || "Unknown",
+      productName: i.productName || products.find((p) => p.id === i.productId)?.name || "Inconnu",
       quantity: parseInt(i.quantity),
       unitCost: parseFloat(i.unitCost),
       lineTotal: (parseInt(i.quantity) || 0) * (parseFloat(i.unitCost) || 0),
+      variationId: i.variationId || null,
     }))
     await insertChildRows("purchase_items", itemRows)
 
-    // Update inventory: add stock for each item
+    // Update stock: per-variation or per-inventory
     for (const item of validItems) {
       const qty = parseInt(item.quantity) || 0
-      const existing = inventoryByProduct.get(item.productId)
-      if (existing) {
-        await updateInventory(existing.id, { stock: existing.stock + qty, lastUpdated: today } as Partial<InventoryItem>)
+      if (item.variationId) {
+        // Update product_variations.stock
+        const variation = variations.find((v) => v.id === item.variationId)
+        if (variation) {
+          await updateVariation(variation.id, { stock: variation.stock + qty } as Partial<ProductVariation>)
+        }
       } else {
-        await insertInventory({
-          productId: item.productId,
-          stock: qty,
-          minStock: 10,
-          lastUpdated: today,
-        } as Partial<InventoryItem>)
+        // Update inventory.stock (existing behavior)
+        const existing = inventoryByProduct.get(item.productId)
+        if (existing) {
+          await updateInventory(existing.id, { stock: existing.stock + qty, lastUpdated: today } as Partial<InventoryItem>)
+        } else {
+          await insertInventory({
+            productId: item.productId,
+            stock: qty,
+            minStock: 10,
+            lastUpdated: today,
+          } as Partial<InventoryItem>)
+        }
+      }
+
+      // Auto-update product.cost with latest purchase cost
+      const prod = products.find((p) => p.id === item.productId)
+      if (prod) {
+        const cost = parseFloat(item.unitCost) || 0
+        if (cost > 0) {
+          await updateProduct(prod.id, { cost } as Partial<Product>)
+        }
       }
     }
 
@@ -248,7 +295,7 @@ export default function PurchasesPage() {
       logAction({
         action: "purchase.created",
         module: "purchases",
-        description: `Created PO ${poNumber} from ${supplier.name} — ${formatCurrency(subtotal)}`,
+        description: `Créé BC ${poNumber} de ${supplier.name} — ${formatCurrency(subtotal)}`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
@@ -257,20 +304,32 @@ export default function PurchasesPage() {
     }
 
     refreshOrders()
+    refreshVariations()
     setShowNewOrder(false)
     resetForm()
   }
 
   // ── Delete order ─────────────────────────────────────────
   const handleDeleteOrder = async (order: PurchaseOrder) => {
-    // Reverse inventory
     const items = order.items ?? []
     const today = new Date().toISOString().split("T")[0]
+
+    // Reverse stock changes
     for (const item of items) {
-      const inv = inventoryByProduct.get(item.productId ?? "")
-      if (inv) {
-        const newStock = Math.max(0, inv.stock - (item.quantity ?? 0))
-        await updateInventory(inv.id, { stock: newStock, lastUpdated: today } as Partial<InventoryItem>)
+      if (item.variationId) {
+        // Reverse variation stock
+        const variation = variations.find((v) => v.id === item.variationId)
+        if (variation) {
+          const newStock = Math.max(0, variation.stock - (item.quantity ?? 0))
+          await updateVariation(variation.id, { stock: newStock } as Partial<ProductVariation>)
+        }
+      } else {
+        // Reverse inventory stock
+        const inv = inventoryByProduct.get(item.productId ?? "")
+        if (inv) {
+          const newStock = Math.max(0, inv.stock - (item.quantity ?? 0))
+          await updateInventory(inv.id, { stock: newStock, lastUpdated: today } as Partial<InventoryItem>)
+        }
       }
     }
 
@@ -284,7 +343,7 @@ export default function PurchasesPage() {
       logAction({
         action: "purchase.deleted",
         module: "purchases",
-        description: `Deleted PO ${order.poNumber} from ${order.supplierName} — ${formatCurrency(order.total)}`,
+        description: `Supprimé BC ${order.poNumber} de ${order.supplierName} — ${formatCurrency(order.total)}`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
@@ -293,6 +352,7 @@ export default function PurchasesPage() {
     }
 
     refreshOrders()
+    refreshVariations()
     setDeleteConfirm(null)
   }
 
@@ -305,7 +365,7 @@ export default function PurchasesPage() {
       logAction({
         action: "purchase.received",
         module: "purchases",
-        description: `Marked PO ${order.poNumber} as received`,
+        description: `BC ${order.poNumber} marqué comme reçu`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
@@ -325,11 +385,10 @@ export default function PurchasesPage() {
 
     const validation = validatePayment({ amount, maxAmount: maxPayable })
     if (!validation.valid) {
-      setPaymentError(validation.errors.amount ?? "Invalid payment")
+      setPaymentError(validation.errors.amount ?? "Paiement invalide")
       return
     }
 
-    const today = new Date().toISOString().split("T")[0]
     const newPaid = (showPayment.amountPaid ?? 0) + amount
     const newRemaining = Math.max(0, (showPayment.total ?? 0) - newPaid)
 
@@ -344,7 +403,7 @@ export default function PurchasesPage() {
       logAction({
         action: "purchase.payment",
         module: "purchases",
-        description: `Recorded payment of ${formatCurrency(amount)} on PO ${showPayment.poNumber}`,
+        description: `Paiement de ${formatCurrency(amount)} enregistré sur BC ${showPayment.poNumber}`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
@@ -425,7 +484,7 @@ export default function PurchasesPage() {
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         {loading ? (
           <div className="py-16 text-center">
-            <p className="text-gray-400">Loading purchase orders...</p>
+            <p className="text-gray-400">{t("common.loading")}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
@@ -433,8 +492,8 @@ export default function PurchasesPage() {
             <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">
               {orders.length === 0
-                ? "Create your first purchase order to get started"
-                : "Try adjusting your search or filter"}
+                ? t("purchases.createFirstPurchase")
+                : t("common.noResults")}
             </p>
           </div>
         ) : (
@@ -442,8 +501,8 @@ export default function PurchasesPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">PO #</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">BC #</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">{t("common.date")}</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">{t("purchases.supplier")}</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">{t("common.quantity")}</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">{t("purchases.totalAmount")}</th>
@@ -459,7 +518,7 @@ export default function PurchasesPage() {
                     <td className="px-4 py-3 font-mono font-medium text-gray-900">{o.poNumber}</td>
                     <td className="px-4 py-3 text-gray-500">{formatDate(o.date)}</td>
                     <td className="px-4 py-3 font-medium text-gray-900">{o.supplierName}</td>
-                    <td className="px-4 py-3 text-gray-500">{(o.items ?? []).reduce((s, i) => s + (i?.quantity ?? 0), 0)} units</td>
+                    <td className="px-4 py-3 text-gray-500">{(o.items ?? []).reduce((s, i) => s + (i?.quantity ?? 0), 0)} unités</td>
                     <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(o.total)}</td>
                     <td className="px-4 py-3 text-right text-green-600 font-medium">{formatCurrency(o.amountPaid ?? 0)}</td>
                     <td className="px-4 py-3 text-right">
@@ -473,7 +532,7 @@ export default function PurchasesPage() {
                         <button
                           onClick={() => setSelectedOrder(o)}
                           className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-                          title="View details"
+                          title="Voir les détails"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
@@ -481,7 +540,7 @@ export default function PurchasesPage() {
                           <button
                             onClick={() => { setShowPayment(o); setPaymentAmount(""); setPaymentNote(""); setPaymentError("") }}
                             className="p-1.5 rounded-lg hover:bg-green-50 text-gray-400 hover:text-green-600"
-                            title="Record payment"
+                            title={t("purchases.recordPayment")}
                           >
                             <CreditCard className="h-4 w-4" />
                           </button>
@@ -511,44 +570,52 @@ export default function PurchasesPage() {
         >
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b">
-              <h2 className="text-lg font-bold text-gray-900">PO {selectedOrder.poNumber}</h2>
+              <h2 className="text-lg font-bold text-gray-900">BC {selectedOrder.poNumber}</h2>
               <button onClick={() => setSelectedOrder(null)} className="p-1 hover:bg-gray-100 rounded">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div><span className="text-gray-500">Supplier:</span><p className="font-medium text-gray-900">{selectedOrder.supplierName}</p></div>
-                <div><span className="text-gray-500">Status:</span><div className="mt-1"><StatusBadge status={selectedOrder.status} /></div></div>
-                <div><span className="text-gray-500">Order Date:</span><p className="font-medium">{formatDate(selectedOrder.date)}</p></div>
-                <div><span className="text-gray-500">Expected:</span><p className="font-medium">{selectedOrder.expectedDate ? formatDate(selectedOrder.expectedDate) : "—"}</p></div>
-                <div><span className="text-gray-500">Amount Paid:</span><p className="font-medium text-green-600">{formatCurrency(selectedOrder.amountPaid ?? 0)}</p></div>
-                <div><span className="text-gray-500">Remaining Debt:</span><p className={`font-medium ${(selectedOrder.remainingDebt ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(selectedOrder.remainingDebt ?? 0)}</p></div>
+                <div><span className="text-gray-500">{t("purchases.supplier")} :</span><p className="font-medium text-gray-900">{selectedOrder.supplierName}</p></div>
+                <div><span className="text-gray-500">{t("common.status")} :</span><div className="mt-1"><StatusBadge status={selectedOrder.status} /></div></div>
+                <div><span className="text-gray-500">Date de commande :</span><p className="font-medium">{formatDate(selectedOrder.date)}</p></div>
+                <div><span className="text-gray-500">Date prévue :</span><p className="font-medium">{selectedOrder.expectedDate ? formatDate(selectedOrder.expectedDate) : "—"}</p></div>
+                <div><span className="text-gray-500">{t("purchases.amountPaid")} :</span><p className="font-medium text-green-600">{formatCurrency(selectedOrder.amountPaid ?? 0)}</p></div>
+                <div><span className="text-gray-500">{t("purchases.remainingDebt")} :</span><p className={`font-medium ${(selectedOrder.remainingDebt ?? 0) > 0 ? "text-red-600" : "text-green-600"}`}>{formatCurrency(selectedOrder.remainingDebt ?? 0)}</p></div>
               </div>
               <div className="border-t pt-4">
-                <h4 className="text-sm font-medium text-gray-900 mb-3">Order Items</h4>
+                <h4 className="text-sm font-medium text-gray-900 mb-3">{t("purchases.orderItems")}</h4>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className="text-left py-2 text-gray-500">Item</th>
-                      <th className="text-right py-2 text-gray-500">Qty</th>
-                      <th className="text-right py-2 text-gray-500">Cost</th>
-                      <th className="text-right py-2 text-gray-500">Total</th>
+                      <th className="text-left py-2 text-gray-500">Article</th>
+                      <th className="text-right py-2 text-gray-500">Qté</th>
+                      <th className="text-right py-2 text-gray-500">Coût</th>
+                      <th className="text-right py-2 text-gray-500">{t("common.total")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(selectedOrder.items ?? []).map((item, i) => (
-                      <tr key={item.id ?? i} className="border-b border-gray-100">
-                        <td className="py-2">{item.productName}</td>
-                        <td className="text-right py-2">{item.quantity}</td>
-                        <td className="text-right py-2">{formatCurrency(item.unitCost)}</td>
-                        <td className="text-right py-2 font-medium">{formatCurrency(item.lineTotal)}</td>
-                      </tr>
-                    ))}
+                    {(selectedOrder.items ?? []).map((item, i) => {
+                      const variation = item.variationId ? variations.find((v) => v.id === item.variationId) : null
+                      return (
+                        <tr key={item.id ?? i} className="border-b border-gray-100">
+                          <td className="py-2">
+                            {item.productName}
+                            {variation && (
+                              <span className="ml-1 text-xs text-indigo-600">({variation.variationType}: {variation.variationValue})</span>
+                            )}
+                          </td>
+                          <td className="text-right py-2">{item.quantity}</td>
+                          <td className="text-right py-2">{formatCurrency(item.unitCost)}</td>
+                          <td className="text-right py-2 font-medium">{formatCurrency(item.lineTotal)}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={3} className="pt-3 text-right font-semibold">Total:</td>
+                      <td colSpan={3} className="pt-3 text-right font-semibold">{t("common.total")} :</td>
                       <td className="pt-3 text-right font-bold text-indigo-600">{formatCurrency(selectedOrder.total)}</td>
                     </tr>
                   </tfoot>
@@ -562,7 +629,7 @@ export default function PurchasesPage() {
                     onClick={() => handleMarkReceived(selectedOrder)}
                     className="flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
                   >
-                    Mark as Received
+                    {t("purchases.markReceived")}
                   </button>
                 )}
                 {(selectedOrder.remainingDebt ?? 0) > 0 && selectedOrder.status !== "cancelled" && (
@@ -576,7 +643,7 @@ export default function PurchasesPage() {
                     }}
                     className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                   >
-                    Record Payment
+                    {t("purchases.recordPayment")}
                   </button>
                 )}
               </div>
@@ -591,11 +658,11 @@ export default function PurchasesPage() {
           <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{t("purchases.deletePurchase")}</h3>
             <p className="text-sm text-gray-500 mb-1">
-              PO <span className="font-mono font-medium">{deleteConfirm.poNumber}</span> from{" "}
+              BC <span className="font-mono font-medium">{deleteConfirm.poNumber}</span> de{" "}
               <span className="font-medium">{deleteConfirm.supplierName}</span>
             </p>
             <p className="text-sm text-gray-500 mb-6">
-              This will reverse the inventory stock and remove the associated supplier debt. This cannot be undone.
+              {t("purchases.deleteConfirm")}
             </p>
             <div className="flex gap-3">
               <button
@@ -620,7 +687,7 @@ export default function PurchasesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-              <h2 className="text-lg font-semibold text-gray-900">Record Payment</h2>
+              <h2 className="text-lg font-semibold text-gray-900">{t("purchases.recordPayment")}</h2>
               <button
                 onClick={() => { setShowPayment(null); setPaymentError("") }}
                 className="p-1 rounded-lg hover:bg-gray-100"
@@ -630,15 +697,15 @@ export default function PurchasesPage() {
             </div>
             <div className="p-6 space-y-4">
               <div className="rounded-lg bg-gray-50 p-3">
-                <p className="font-medium text-gray-900">PO {showPayment.poNumber}</p>
+                <p className="font-medium text-gray-900">BC {showPayment.poNumber}</p>
                 <p className="text-sm text-gray-500 mt-0.5">{showPayment.supplierName}</p>
                 <div className="flex justify-between mt-2 text-sm">
-                  <span className="text-gray-500">Remaining:</span>
+                  <span className="text-gray-500">Reste à payer :</span>
                   <span className="font-semibold text-red-600">{formatCurrency(showPayment.remainingDebt ?? 0)}</span>
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Payment Amount</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("purchases.paymentAmount")}</label>
                 <input
                   type="number"
                   step="0.01"
@@ -652,12 +719,12 @@ export default function PurchasesPage() {
                 <FormError error={paymentError} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Note (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("purchases.paymentNote")}</label>
                 <input
                   value={paymentNote}
                   onChange={(e) => setPaymentNote(e.target.value)}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  placeholder="e.g. Bank transfer #1234"
+                  placeholder="ex: Virement bancaire #1234"
                 />
               </div>
             </div>
@@ -673,7 +740,7 @@ export default function PurchasesPage() {
                 disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                Record Payment
+                {t("purchases.recordPayment")}
               </button>
             </div>
           </div>
@@ -696,19 +763,19 @@ export default function PurchasesPage() {
             <div className="p-6 space-y-4">
               {activeSuppliers.length === 0 && (
                 <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
-                  No active suppliers found. Add suppliers first.
+                  {t("purchases.noSuppliers")}
                 </div>
               )}
 
               {/* Supplier selection */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.supplier")}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("purchases.supplier")} *</label>
                 <select
                   value={formSupplierId}
                   onChange={(e) => { setFormSupplierId(e.target.value); setFormErrors({}) }}
                   className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
-                  <option value="">Select a supplier...</option>
+                  <option value="">{t("purchases.selectSupplier")}</option>
                   {activeSuppliers.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
@@ -719,58 +786,81 @@ export default function PurchasesPage() {
               {/* Items */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-sm font-medium text-gray-700">Order Items</label>
+                  <label className="text-sm font-medium text-gray-700">{t("purchases.orderItems")} *</label>
                   <button
                     onClick={addItem}
                     className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Add Item
+                    <Plus className="h-3.5 w-3.5" /> {t("purchases.addItem")}
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {formItems.map((item, idx) => (
-                    <div key={idx} className="flex gap-2 items-start">
-                      <div className="flex-1">
-                        <select
-                          value={item.productId}
-                          onChange={(e) => updateItem(idx, "productId", e.target.value)}
-                          className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="">Select product...</option>
-                          {activeProducts.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name} (Cost: {formatCurrency(p.cost)})</option>
-                          ))}
-                        </select>
+                  {formItems.map((item, idx) => {
+                    const prodVariations = variationsByProduct.get(item.productId) ?? []
+                    return (
+                      <div key={idx} className="space-y-2 p-3 rounded-lg bg-gray-50 border border-gray-100">
+                        <div className="flex gap-2 items-start">
+                          <div className="flex-1">
+                            <select
+                              value={item.productId}
+                              onChange={(e) => updateItem(idx, "productId", e.target.value)}
+                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="">{t("purchases.selectProduct")}</option>
+                              {activeProducts.map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(idx, "quantity", e.target.value)}
+                            className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder="Qté"
+                          />
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={item.unitCost}
+                            onChange={(e) => updateItem(idx, "unitCost", e.target.value)}
+                            className="w-28 rounded-lg border border-gray-200 px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            placeholder={t("purchases.unitCost")}
+                          />
+                          <span className="w-24 py-2 text-sm text-right font-medium text-gray-700">
+                            {formatCurrency((parseInt(item.quantity) || 0) * (parseFloat(item.unitCost) || 0))}
+                          </span>
+                          {formItems.length > 1 && (
+                            <button
+                              onClick={() => removeItem(idx)}
+                              className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        {/* Variation dropdown if product has variations */}
+                        {prodVariations.length > 0 && (
+                          <div className="ml-0">
+                            <label className="block text-xs text-gray-500 mb-1">{t("purchases.selectVariation")}</label>
+                            <select
+                              value={item.variationId}
+                              onChange={(e) => updateItem(idx, "variationId", e.target.value)}
+                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="">{t("purchases.selectVariation")}</option>
+                              {prodVariations.map((v) => (
+                                <option key={v.id} value={v.id}>
+                                  {v.variationType}: {v.variationValue} (stock: {v.stock})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(idx, "quantity", e.target.value)}
-                        className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Qty"
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={item.unitCost}
-                        onChange={(e) => updateItem(idx, "unitCost", e.target.value)}
-                        className="w-28 rounded-lg border border-gray-200 px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                        placeholder="Unit cost"
-                      />
-                      <span className="w-24 py-2 text-sm text-right font-medium text-gray-700">
-                        {formatCurrency((parseInt(item.quantity) || 0) * (parseFloat(item.unitCost) || 0))}
-                      </span>
-                      {formItems.length > 1 && (
-                        <button
-                          onClick={() => removeItem(idx)}
-                          className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"
-                        >
-                          <Minus className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 <FormError error={formErrors.items} />
               </div>
@@ -778,7 +868,7 @@ export default function PurchasesPage() {
               {/* Totals */}
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Order Total:</span>
+                  <span className="text-gray-500">{t("purchases.orderTotal")} :</span>
                   <span className="font-bold text-gray-900">{formatCurrency(formSubtotal)}</span>
                 </div>
               </div>
@@ -807,7 +897,7 @@ export default function PurchasesPage() {
                 <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                   <p className="text-xs text-amber-700">
-                    A supplier debt of {formatCurrency(formRemainingDebt)} will be automatically created for tracking.
+                    {t("purchases.debtWarning")} ({formatCurrency(formRemainingDebt)})
                   </p>
                 </div>
               )}

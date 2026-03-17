@@ -83,8 +83,8 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
                 <LayoutDashboard className="h-4 w-4" />
               </div>
               <div>
-                <h1 className="text-sm font-bold text-gray-900">Retail ERP</h1>
-                <p className="text-[10px] text-gray-500">Business Management</p>
+                <h1 className="text-sm font-bold text-gray-900">ERP Algérie</h1>
+                <p className="text-[10px] text-gray-500">Gestion commerciale</p>
               </div>
             </Link>
           )}
@@ -148,7 +148,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         {/* Version */}
         {!collapsed && (
           <div className="px-4 py-3 border-t border-gray-200">
-            <p className="text-xs text-gray-400">System Version</p>
+            <p className="text-xs text-gray-400">Version du système</p>
             <p className="text-xs font-medium text-gray-600">v2.0.0</p>
           </div>
         )}

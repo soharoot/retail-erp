@@ -96,7 +96,7 @@ export default function DashboardPage() {
       value: formatCurrency(totalRevenue),
       icon: DollarSign,
       color: "text-indigo-600 bg-indigo-50",
-      sub: `${completedSales.length} completed sales`,
+      sub: `${completedSales.length} ventes complétées`,
       trend: "up",
     },
     {
@@ -104,7 +104,7 @@ export default function DashboardPage() {
       value: formatCurrency(netProfit),
       icon: TrendingUp,
       color: netProfit >= 0 ? "text-green-600 bg-green-50" : "text-red-600 bg-red-50",
-      sub: `Margin: ${totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0}%`,
+      sub: `Marge: ${totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0}%`,
       trend: netProfit >= 0 ? "up" : "down",
     },
     {
@@ -112,7 +112,7 @@ export default function DashboardPage() {
       value: formatCurrency(totalExpenses),
       icon: TrendingDown,
       color: "text-orange-600 bg-orange-50",
-      sub: `${purchases.filter((p) => p.status !== "cancelled").length} purchase orders`,
+      sub: `${purchases.filter((p) => p.status !== "cancelled").length} bons de commande`,
       trend: "neutral",
     },
     {
@@ -120,7 +120,7 @@ export default function DashboardPage() {
       value: formatCurrency(outstandingDebt),
       icon: Landmark,
       color: outstandingDebt > 0 ? "text-red-600 bg-red-50" : "text-green-600 bg-green-50",
-      sub: `${debts.filter((d) => d.status !== "paid").length} unpaid debts`,
+      sub: `${debts.filter((d) => d.status !== "paid").length} dettes impayées`,
       trend: outstandingDebt > 0 ? "down" : "up",
     },
   ]
@@ -169,7 +169,7 @@ export default function DashboardPage() {
           <div>
             <p className="text-sm font-medium text-gray-500">{t("dashboard.inventoryValue")}</p>
             <p className="mt-1 text-2xl font-bold text-gray-900">{formatCurrency(inventoryValue)}</p>
-            <p className="text-xs text-gray-400 mt-1">{inventory.length} products in stock</p>
+            <p className="text-xs text-gray-400 mt-1">{inventory.length} produits en stock</p>
           </div>
           <span className="rounded-lg p-3 text-blue-600 bg-blue-50">
             <Warehouse className="h-6 w-6" />
@@ -183,13 +183,13 @@ export default function DashboardPage() {
           <h2 className="text-sm font-semibold text-gray-900 mb-4">{t("dashboard.salesChart")}</h2>
           {chartData.every((d) => d.revenue === 0 && d.expenses === 0) ? (
             <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-              No data yet — create sales and purchases to see the chart
+              Pas encore de données — créez des ventes et achats pour voir le graphique
             </div>
           ) : (
             <div className="space-y-2">
               <div className="flex items-center gap-4 mb-3 text-xs">
-                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-indigo-500" /> Revenue</span>
-                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-orange-400" /> Expenses</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-indigo-500" /> Revenus</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-orange-400" /> Dépenses</span>
               </div>
               {chartData.map((d) => (
                 <div key={d.label} className="flex items-center gap-3 text-xs">
@@ -244,7 +244,7 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-900">{t("dashboard.recentTransactions")}</h2>
-            <Link href="/sales" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">View all</Link>
+            <Link href="/sales" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Voir tout</Link>
           </div>
           {salesLoading ? (
             <div className="py-12 text-center text-sm text-gray-400">Loading...</div>
@@ -258,7 +258,7 @@ export default function DashboardPage() {
                 <div key={sale.id} className="flex items-center justify-between px-5 py-3">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{sale.customerName}</p>
-                    <p className="text-xs text-gray-400">{formatDate(sale.date)} · {(sale.items ?? []).length} items</p>
+                    <p className="text-xs text-gray-400">{formatDate(sale.date)} · {(sale.items ?? []).length} article(s)</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-gray-900">{formatCurrency(sale.total)}</p>
@@ -278,7 +278,7 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-900">{t("dashboard.lowStockAlerts")}</h2>
-            <Link href="/inventory" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">View all</Link>
+            <Link href="/inventory" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Voir tout</Link>
           </div>
           {lowStockItems.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">
@@ -297,7 +297,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="text-right">
                     <p className={`text-sm font-semibold ${(item.stock ?? 0) === 0 ? "text-red-600" : "text-yellow-600"}`}>
-                      {item.stock ?? 0} left
+                      {item.stock ?? 0} restant(s)
                     </p>
                     <p className="text-xs text-gray-400">Min: {item.minStock}</p>
                   </div>

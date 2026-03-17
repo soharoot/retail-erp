@@ -7,57 +7,46 @@ import {
   useMemo,
   type ReactNode,
 } from "react"
-import { useSupabaseData } from "@/hooks/use-supabase-data"
-import { defaultSettings, type Settings } from "@/lib/types"
-import { translations, resolveKey, type Language } from "./translations"
+import { translations, resolveKey } from "./translations"
 import { setCurrency } from "@/lib/utils"
 
 interface I18nContextValue {
-  language: Language
-  dir: "ltr" | "rtl"
+  language: "fr"
+  dir: "ltr"
   t: (key: string) => string
-  setLanguage: (lang: Language) => void
+  setLanguage: (lang: string) => void
 }
 
 const I18nContext = createContext<I18nContextValue>({
-  language: "en",
+  language: "fr",
   dir: "ltr",
   t: (key) => key,
   setLanguage: () => {},
 })
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [settings, setSettings] = useSupabaseData<Settings>(
-    "erp-settings",
-    defaultSettings
-  )
+  // Force French language and DZD currency for Algeria
+  const language = "fr" as const
+  const dir = "ltr" as const
 
-  const language: Language =
-    (settings.language as Language) in translations
-      ? (settings.language as Language)
-      : "en"
-
-  const dir: "ltr" | "rtl" = language === "ar" ? "rtl" : "ltr"
-
-  // Keep <html lang> and <html dir> in sync without a server-component rewrite
+  // Keep <html lang> in sync
   useEffect(() => {
-    document.documentElement.lang = language
-    document.documentElement.dir = dir
-  }, [language, dir])
+    document.documentElement.lang = "fr"
+    document.documentElement.dir = "ltr"
+  }, [])
 
-  // Keep formatCurrency in sync with settings.currency across all pages
+  // Force DZD currency
   useEffect(() => {
-    setCurrency(settings.currency || "USD")
-  }, [settings.currency])
+    setCurrency("DZD")
+  }, [])
 
   const t = useMemo(() => {
-    const langObj = translations[language] as Record<string, unknown>
+    const langObj = translations.fr as Record<string, unknown>
     return (key: string): string => resolveKey(langObj, key)
-  }, [language])
+  }, [])
 
-  const setLanguage = (lang: Language) => {
-    setSettings({ ...settings, language: lang })
-  }
+  // setLanguage is a no-op (French only)
+  const setLanguage = () => {}
 
   return (
     <I18nContext.Provider value={{ language, dir, t, setLanguage }}>

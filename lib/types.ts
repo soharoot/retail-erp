@@ -5,6 +5,23 @@
 // DB uses snake_case; TypeScript uses camelCase.
 // ============================================================
 
+// ── Categories & Sub-categories ────────────────────────────
+
+export interface Category {
+  id: string
+  orgId: string
+  name: string
+  createdAt: string
+}
+
+export interface SubCategory {
+  id: string
+  orgId: string
+  categoryId: string
+  name: string
+  createdAt: string
+}
+
 // ── Products & Inventory ────────────────────────────────────
 
 export interface Product {
@@ -12,14 +29,27 @@ export interface Product {
   orgId: string
   name: string
   sku?: string
-  category: string
+  category: string          // legacy text field (display fallback)
+  categoryId?: string | null
+  subCategoryId?: string | null
   description: string
-  price: number   // selling price
-  cost: number    // purchase / cost price
+  price: number             // selling price
+  cost: number              // last purchase cost (auto-updated, not user-editable)
   status: "active" | "inactive"
   deletedAt?: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface ProductVariation {
+  id: string
+  orgId: string
+  productId: string
+  variationType: string     // e.g. "Taille", "Couleur", "Stockage"
+  variationValue: string    // e.g. "S", "Noir", "128Go"
+  stock: number
+  sku?: string
+  createdAt: string
 }
 
 export interface InventoryItem {
@@ -40,6 +70,7 @@ export interface SaleItem {
   saleId: string
   productId?: string | null
   productName: string
+  variationId?: string | null
   quantity: number
   unitPrice: number
   costAtSale: number  // product.cost captured at time of sale for COGS
@@ -72,6 +103,7 @@ export interface PurchaseItem {
   purchaseOrderId: string
   productId?: string | null
   productName: string
+  variationId?: string | null
   quantity: number
   unitCost: number
   lineTotal: number
@@ -207,11 +239,11 @@ export const defaultSettings: Settings = {
   email: "",
   website: "",
   taxId: "",
-  currency: "USD",
+  currency: "DZD",
   taxRate: 0,
-  dateFormat: "MM/DD/YYYY",
-  timezone: "UTC",
-  language: "en",
+  dateFormat: "DD/MM/YYYY",
+  timezone: "Africa/Algiers",
+  language: "fr",
   invoicePrefix: "INV",
   poPrefix: "PO",
   emailNotifications: true,

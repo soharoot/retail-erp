@@ -17,7 +17,7 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("company")
   const [saved, setSaved] = useState(false)
   const [settings, updateSettings, settingsLoading] = useSettings()
-  const { setLanguage } = useI18n()
+  const { t } = useI18n()
   const { user } = useAuth()
   const { orgId } = useRBAC()
   const { preferences, setPreferences } = useTheme()
@@ -30,7 +30,7 @@ export default function SettingsPage() {
       logAction({
         action: "settings.saved",
         module: "settings",
-        description: `Settings updated (tab: ${activeTab})`,
+        description: `Paramètres mis à jour (onglet: ${activeTab})`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
@@ -44,12 +44,12 @@ export default function SettingsPage() {
   }
 
   const tabs = [
-    { id: "company", label: "Company Info", icon: Building2 },
-    { id: "regional", label: "Regional", icon: Globe },
-    { id: "billing", label: "Billing & Tax", icon: CreditCard },
+    { id: "company", label: "Informations entreprise", icon: Building2 },
+    { id: "regional", label: "Régional", icon: Globe },
+    { id: "billing", label: "Facturation & TVA", icon: CreditCard },
     { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "system", label: "System", icon: Database },
+    { id: "appearance", label: "Apparence", icon: Palette },
+    { id: "system", label: "Système", icon: Database },
   ]
 
   const inputClass = "w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -58,7 +58,7 @@ export default function SettingsPage() {
   if (settingsLoading) {
     return (
       <PageGuard permission={PERMISSIONS.SETTINGS_VIEW}>
-        <div className="py-16 text-center text-gray-400">Loading settings...</div>
+        <div className="py-16 text-center text-gray-400">{t("common.loading")}</div>
       </PageGuard>
     )
   }
@@ -66,7 +66,7 @@ export default function SettingsPage() {
   return (
     <PageGuard permission={PERMISSIONS.SETTINGS_VIEW}>
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="Settings" subtitle="Configure your ERP system preferences" />
+      <PageHeader title={t("settings.title")} subtitle={t("settings.subtitle")} />
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Settings Nav */}
@@ -87,16 +87,16 @@ export default function SettingsPage() {
             {activeTab === "company" && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Company Information</h3>
-                  <p className="text-sm text-gray-500">Manage your business details</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Informations de l&apos;entreprise</h3>
+                  <p className="text-sm text-gray-500">Gérez les détails de votre entreprise</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="md:col-span-2"><label className={labelClass}>Company Name</label><input value={settings.companyName} onChange={e => setField({ companyName: e.target.value })} className={inputClass} /></div>
-                  <div className="md:col-span-2"><label className={labelClass}>Address</label><textarea value={settings.address} onChange={e => setField({ address: e.target.value })} rows={2} className={inputClass} /></div>
-                  <div><label className={labelClass}>Phone</label><input value={settings.phone} onChange={e => setField({ phone: e.target.value })} className={inputClass} /></div>
+                  <div className="md:col-span-2"><label className={labelClass}>Nom de l&apos;entreprise</label><input value={settings.companyName} onChange={e => setField({ companyName: e.target.value })} className={inputClass} /></div>
+                  <div className="md:col-span-2"><label className={labelClass}>Adresse</label><textarea value={settings.address} onChange={e => setField({ address: e.target.value })} rows={2} className={inputClass} /></div>
+                  <div><label className={labelClass}>Téléphone</label><input value={settings.phone} onChange={e => setField({ phone: e.target.value })} className={inputClass} /></div>
                   <div><label className={labelClass}>Email</label><input value={settings.email} onChange={e => setField({ email: e.target.value })} className={inputClass} /></div>
-                  <div><label className={labelClass}>Website</label><input value={settings.website} onChange={e => setField({ website: e.target.value })} className={inputClass} /></div>
-                  <div><label className={labelClass}>Tax ID / EIN</label><input value={settings.taxId} onChange={e => setField({ taxId: e.target.value })} className={inputClass} /></div>
+                  <div><label className={labelClass}>Site web</label><input value={settings.website} onChange={e => setField({ website: e.target.value })} className={inputClass} /></div>
+                  <div><label className={labelClass}>NIF / NIS</label><input value={settings.taxId} onChange={e => setField({ taxId: e.target.value })} className={inputClass} /></div>
                 </div>
               </div>
             )}
@@ -104,30 +104,28 @@ export default function SettingsPage() {
             {activeTab === "regional" && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Regional Settings</h3>
-                  <p className="text-sm text-gray-500">Configure locale and formatting preferences</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Paramètres régionaux</h3>
+                  <p className="text-sm text-gray-500">Configuration fixée pour l&apos;Algérie</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><label className={labelClass}>Currency</label><select value={settings.currency} onChange={e => setField({ currency: e.target.value })} className={inputClass}><option value="DZD">DZD - Algerian Dinar (DA)</option><option value="USD">USD - US Dollar</option><option value="EUR">EUR - Euro</option><option value="GBP">GBP - British Pound</option><option value="CAD">CAD - Canadian Dollar</option><option value="AUD">AUD - Australian Dollar</option></select></div>
-                  <div><label className={labelClass}>Date Format</label><select value={settings.dateFormat} onChange={e => setField({ dateFormat: e.target.value })} className={inputClass}><option value="MM/DD/YYYY">MM/DD/YYYY</option><option value="DD/MM/YYYY">DD/MM/YYYY</option><option value="YYYY-MM-DD">YYYY-MM-DD</option></select></div>
-                  <div><label className={labelClass}>Timezone</label><select value={settings.timezone} onChange={e => setField({ timezone: e.target.value })} className={inputClass}><option value="America/New_York">Eastern Time (ET)</option><option value="America/Chicago">Central Time (CT)</option><option value="America/Denver">Mountain Time (MT)</option><option value="America/Los_Angeles">Pacific Time (PT)</option><option value="Europe/London">GMT</option><option value="Europe/Paris">CET</option></select></div>
                   <div>
-                    <label className={labelClass}>Language</label>
-                    <select
-                      value={settings.language}
-                      onChange={e => {
-                        const lang = e.target.value
-                        setField({ language: lang })
-                        setLanguage(lang as "en" | "fr" | "ar")
-                      }}
-                      className={inputClass}
-                    >
-                      <option value="en">English</option>
-                      <option value="fr">French — Français</option>
-                      <option value="ar">Arabic — العربية</option>
-                      <option value="es">Spanish — Español</option>
-                      <option value="de">German — Deutsch</option>
+                    <label className={labelClass}>Devise</label>
+                    <div className={`${inputClass} bg-gray-50 text-gray-700`}>DZD — Dinar algérien (DA)</div>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Format de date</label>
+                    <select value={settings.dateFormat} onChange={e => setField({ dateFormat: e.target.value })} className={inputClass}>
+                      <option value="DD/MM/YYYY">JJ/MM/AAAA</option>
+                      <option value="YYYY-MM-DD">AAAA-MM-JJ</option>
                     </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Fuseau horaire</label>
+                    <div className={`${inputClass} bg-gray-50 text-gray-700`}>Africa/Algiers (CET)</div>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Langue</label>
+                    <div className={`${inputClass} bg-gray-50 text-gray-700`}>Français</div>
                   </div>
                 </div>
               </div>
@@ -136,18 +134,18 @@ export default function SettingsPage() {
             {activeTab === "billing" && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Billing & Tax Configuration</h3>
-                  <p className="text-sm text-gray-500">Configure tax rates and billing preferences</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Facturation & TVA</h3>
+                  <p className="text-sm text-gray-500">Configurez les taux de TVA et les préférences de facturation</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div><label className={labelClass}>Default Tax Rate (%)</label><input type="number" value={settings.taxRate} onChange={e => setField({ taxRate: parseFloat(e.target.value) || 0 })} className={inputClass} /></div>
-                  <div><label className={labelClass}>Invoice Prefix</label><input value={settings.invoicePrefix} onChange={e => setField({ invoicePrefix: e.target.value })} className={inputClass} /></div>
-                  <div><label className={labelClass}>PO Prefix</label><input value={settings.poPrefix} onChange={e => setField({ poPrefix: e.target.value })} className={inputClass} /></div>
+                  <div><label className={labelClass}>Taux de TVA par défaut (%)</label><input type="number" value={settings.taxRate} onChange={e => setField({ taxRate: parseFloat(e.target.value) || 0 })} className={inputClass} /></div>
+                  <div><label className={labelClass}>Préfixe facture</label><input value={settings.invoicePrefix} onChange={e => setField({ invoicePrefix: e.target.value })} className={inputClass} /></div>
+                  <div><label className={labelClass}>Préfixe bon de commande</label><input value={settings.poPrefix} onChange={e => setField({ poPrefix: e.target.value })} className={inputClass} /></div>
                 </div>
                 <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">Payment Methods Accepted</h4>
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Modes de paiement acceptés</h4>
                   <div className="flex flex-wrap gap-3">
-                    {["Cash", "Credit Card", "Bank Transfer", "Check", "PayPal"].map(m => (
+                    {["Espèces", "Carte de crédit", "Virement bancaire", "Chèque"].map(m => (
                       <label key={m} className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
                         <input type="checkbox" defaultChecked className="rounded text-indigo-600 focus:ring-indigo-500" /><span className="text-sm text-gray-700">{m}</span>
                       </label>
@@ -160,15 +158,15 @@ export default function SettingsPage() {
             {activeTab === "notifications" && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Notification Preferences</h3>
-                  <p className="text-sm text-gray-500">Choose what notifications you want to receive</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Préférences de notification</h3>
+                  <p className="text-sm text-gray-500">Choisissez les notifications que vous souhaitez recevoir</p>
                 </div>
                 <div className="space-y-4">
                   {[
-                    { key: "emailNotifications", label: "Email Notifications", desc: "Receive important updates via email" },
-                    { key: "lowStockAlerts", label: "Low Stock Alerts", desc: "Get notified when products are running low" },
-                    { key: "orderNotifications", label: "Order Notifications", desc: "Receive alerts for new orders and status changes" },
-                    { key: "reportEmails", label: "Weekly Report Emails", desc: "Receive weekly business summary reports" },
+                    { key: "emailNotifications", label: "Notifications par email", desc: "Recevez les mises à jour importantes par email" },
+                    { key: "lowStockAlerts", label: "Alertes de stock bas", desc: "Soyez notifié quand les produits sont en rupture" },
+                    { key: "orderNotifications", label: "Notifications de commandes", desc: "Recevez des alertes pour les nouvelles commandes" },
+                    { key: "reportEmails", label: "Rapports hebdomadaires", desc: "Recevez un résumé hebdomadaire par email" },
                   ].map(item => (
                     <div key={item.key} className="flex items-center justify-between py-3 border-b border-gray-100">
                       <div><p className="text-sm font-medium text-gray-900">{item.label}</p><p className="text-xs text-gray-500">{item.desc}</p></div>
@@ -184,19 +182,19 @@ export default function SettingsPage() {
             {activeTab === "appearance" && (
               <div className="space-y-8">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Appearance</h3>
-                  <p className="text-sm text-gray-500">Customize the look and feel of your workspace</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Apparence</h3>
+                  <p className="text-sm text-gray-500">Personnalisez l&apos;interface de votre espace de travail</p>
                 </div>
 
                 {/* Theme */}
                 <div>
-                  <label className={labelClass}>Theme</label>
-                  <p className="text-xs text-gray-500 mb-3">Controls light / dark appearance of the interface</p>
+                  <label className={labelClass}>Thème</label>
+                  <p className="text-xs text-gray-500 mb-3">Contrôle l&apos;apparence claire / sombre de l&apos;interface</p>
                   <div className="grid grid-cols-3 gap-3">
                     {([
-                      { value: "light"  as const, label: "Light",  previewClass: "bg-white" },
-                      { value: "dark"   as const, label: "Dark",   previewClass: "bg-gray-900" },
-                      { value: "system" as const, label: "System", previewClass: "bg-gradient-to-br from-white to-gray-900" },
+                      { value: "light"  as const, label: "Clair",  previewClass: "bg-white" },
+                      { value: "dark"   as const, label: "Sombre",   previewClass: "bg-gray-900" },
+                      { value: "system" as const, label: "Système", previewClass: "bg-gradient-to-br from-white to-gray-900" },
                     ]).map(opt => (
                       <button
                         key={opt.value}
@@ -216,13 +214,13 @@ export default function SettingsPage() {
 
                 {/* Interface Density */}
                 <div>
-                  <label className={labelClass}>Interface Density</label>
-                  <p className="text-xs text-gray-500 mb-3">Adjust spacing and padding of the main content area</p>
+                  <label className={labelClass}>Densité de l&apos;interface</label>
+                  <p className="text-xs text-gray-500 mb-3">Ajustez l&apos;espacement du contenu principal</p>
                   <div className="grid grid-cols-3 gap-3">
                     {([
-                      { value: "default"      as const, label: "Default",     desc: "Balanced spacing" },
-                      { value: "compact"      as const, label: "Compact",     desc: "Tighter spacing" },
-                      { value: "comfortable"  as const, label: "Comfortable", desc: "More room to breathe" },
+                      { value: "default"      as const, label: "Par défaut",  desc: "Espacement équilibré" },
+                      { value: "compact"      as const, label: "Compact",     desc: "Espacement réduit" },
+                      { value: "comfortable"  as const, label: "Confortable", desc: "Plus d'espace" },
                     ]).map(opt => (
                       <button
                         key={opt.value}
@@ -242,12 +240,12 @@ export default function SettingsPage() {
 
                 {/* Dashboard Layout */}
                 <div>
-                  <label className={labelClass}>Dashboard Layout</label>
-                  <p className="text-xs text-gray-500 mb-3">How KPI cards are displayed on the dashboard</p>
+                  <label className={labelClass}>Disposition du tableau de bord</label>
+                  <p className="text-xs text-gray-500 mb-3">Comment les cartes KPI sont affichées</p>
                   <div className="flex gap-3">
                     {([
-                      { value: "grid" as const, label: "Grid", icon: "\u229e" },
-                      { value: "list" as const, label: "List", icon: "\u2630" },
+                      { value: "grid" as const, label: "Grille", icon: "\u229e" },
+                      { value: "list" as const, label: "Liste", icon: "\u2630" },
                     ]).map(opt => (
                       <button
                         key={opt.value}
@@ -265,27 +263,27 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                <p className="text-xs text-gray-400 italic">Changes are saved automatically per user.</p>
+                <p className="text-xs text-gray-400 italic">Les modifications sont enregistrées automatiquement par utilisateur.</p>
               </div>
             )}
 
             {activeTab === "system" && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">System Settings</h3>
-                  <p className="text-sm text-gray-500">Advanced system configuration</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Paramètres système</h3>
+                  <p className="text-sm text-gray-500">Configuration système avancée</p>
                 </div>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                    <div><p className="text-sm font-medium text-gray-900">Automatic Backup</p><p className="text-xs text-gray-500">Daily backup of all system data</p></div>
+                    <div><p className="text-sm font-medium text-gray-900">Sauvegarde automatique</p><p className="text-xs text-gray-500">Sauvegarde quotidienne de toutes les données</p></div>
                     <button onClick={() => setField({ autoBackup: !settings.autoBackup })} className={`relative w-11 h-6 rounded-full transition-colors ${settings.autoBackup ? "bg-indigo-600" : "bg-gray-200"}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.autoBackup ? "translate-x-5" : ""}`} />
                     </button>
                   </div>
                   <div className="flex items-center justify-between py-3 border-b border-gray-100">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">Two-Factor Authentication</p>
-                      <p className="text-xs text-gray-500">Requires Supabase Auth configuration</p>
+                      <p className="text-sm font-medium text-gray-900">Authentification à deux facteurs</p>
+                      <p className="text-xs text-gray-500">Nécessite la configuration de Supabase Auth</p>
                     </div>
                     <button onClick={() => setField({ twoFactor: !settings.twoFactor })} className={`relative w-11 h-6 rounded-full transition-colors ${settings.twoFactor ? "bg-indigo-600" : "bg-gray-200"}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.twoFactor ? "translate-x-5" : ""}`} />
@@ -293,12 +291,12 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <div className="border-t pt-4">
-                  <h4 className="text-sm font-medium text-gray-900 mb-3">System Information</h4>
+                  <h4 className="text-sm font-medium text-gray-900 mb-3">Informations système</h4>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div><span className="text-gray-500">Version:</span><span className="ml-2 font-medium text-gray-900">v2.0.0</span></div>
-                    <div><span className="text-gray-500">Last Backup:</span><span className="ml-2 font-medium text-gray-900">Not configured</span></div>
-                    <div><span className="text-gray-500">Database:</span><span className="ml-2 font-medium text-gray-900">Supabase PostgreSQL + IndexedDB Cache</span></div>
-                    <div><span className="text-gray-500">Storage:</span><span className="ml-2 font-medium text-gray-900">Normalized tables with RLS</span></div>
+                    <div><span className="text-gray-500">Version :</span><span className="ml-2 font-medium text-gray-900">v2.0.0</span></div>
+                    <div><span className="text-gray-500">Dernière sauvegarde :</span><span className="ml-2 font-medium text-gray-900">Non configuré</span></div>
+                    <div><span className="text-gray-500">Base de données :</span><span className="ml-2 font-medium text-gray-900">Supabase PostgreSQL</span></div>
+                    <div><span className="text-gray-500">Stockage :</span><span className="ml-2 font-medium text-gray-900">Tables normalisées avec RLS</span></div>
                   </div>
                 </div>
               </div>
@@ -306,9 +304,9 @@ export default function SettingsPage() {
 
             {/* Save Button */}
             <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t">
-              {saved && <span className="text-sm text-green-600 font-medium">Settings saved successfully!</span>}
+              {saved && <span className="text-sm text-green-600 font-medium">Paramètres enregistrés avec succès !</span>}
               <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
-                <Save className="h-4 w-4" />Save Changes
+                <Save className="h-4 w-4" />{t("settings.saveChanges")}
               </button>
             </div>
           </div>
