@@ -49,15 +49,15 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#e6f0ed] via-white to-[#cfe6f2] p-4">
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-indigo-600 text-white mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-[#00483c] text-white mb-4">
             <LogIn className="h-7 w-7" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
-          <p className="text-sm text-gray-500 mt-1">Sign in to your Retail ERP account</p>
+          <p className="text-sm text-gray-500 mt-1">Sign in to your Enterprise Ledger account</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
@@ -66,7 +66,7 @@ export default function LoginPage() {
             type="button"
             onClick={handleGoogleLogin}
             disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-5"
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00483c] disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-5"
           >
             {googleLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -111,7 +111,7 @@ export default function LoginPage() {
                   placeholder="you@company.com"
                   required
                   autoComplete="email"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] focus:border-transparent"
                 />
               </div>
             </div>
@@ -128,7 +128,7 @@ export default function LoginPage() {
                   required
                   minLength={6}
                   autoComplete="current-password"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] focus:border-transparent"
                 />
               </div>
             </div>
@@ -136,7 +136,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-white bg-[#00483c] rounded-lg hover:bg-[#003d33] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00483c] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? (
                 <>
@@ -155,7 +155,7 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
               Don&apos;t have an account?{" "}
-              <Link href="/register" className="font-medium text-indigo-600 hover:text-indigo-700">
+              <Link href="/register" className="font-medium text-[#00483c] hover:text-[#003d33]">
                 Create one
               </Link>
             </p>
@@ -163,7 +163,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Retail ERP v1.0 &mdash; Enterprise Resource Planning
+          Enterprise Ledger v2.0 &mdash; Enterprise Resource Planning
         </p>
       </div>
     </div>

@@ -21,7 +21,7 @@ export function PageHeader({ title, subtitle, action }: PageHeaderProps) {
       {action && (
         <button
           onClick={action.onClick}
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors shadow-sm"
+          className="inline-flex items-center gap-2 rounded-lg bg-[#00483c] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#003d33] transition-colors shadow-sm"
         >
           <Plus className="h-4 w-4" />
           {action.label}

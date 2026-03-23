@@ -35,7 +35,7 @@ const MODULE_COLORS: Record<string, string> = {
 }
 
 function moduleBadgeClass(module: string) {
-  return MODULE_COLORS[module] ?? "bg-indigo-100 text-indigo-700"
+  return MODULE_COLORS[module] ?? "bg-[#cce0db] text-[#003d33]"
 }
 
 function formatTimestamp(iso: string) {
@@ -123,14 +123,14 @@ export default function ActivityPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("common.search")}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
             />
           </div>
 
           <select
             value={filterModule}
             onChange={(e) => setFilterModule(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
           >
             <option value="">{t("activity.allModules")}</option>
             {modules.map((m) => (
@@ -161,7 +161,7 @@ export default function ActivityPage() {
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           {loading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00483c]" />
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center">
@@ -174,7 +174,7 @@ export default function ActivityPage() {
               {filtered.map((log) => (
                 <div key={log.id} className="flex items-start gap-4 px-4 py-3 hover:bg-gray-50 transition-colors">
                   {/* Avatar */}
-                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold">
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#cce0db] text-[#00483c] text-xs font-bold">
                     {userInitials(log.user_name)}
                   </div>
 

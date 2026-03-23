@@ -472,7 +472,7 @@ export default function SalesPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: t("sales.totalSales"), value: String(sales.length), icon: ShoppingBag, color: "text-indigo-600 bg-indigo-50" },
+          { label: t("sales.totalSales"), value: String(sales.length), icon: ShoppingBag, color: "text-[#00483c] bg-[#e6f0ed]" },
           { label: t("sales.totalRevenue"), value: formatCurrency(totalRevenue), icon: DollarSign, color: "text-green-600 bg-green-50" },
           { label: t("sales.avgOrderValue"), value: formatCurrency(avgOrder), icon: TrendingUp, color: "text-blue-600 bg-blue-50" },
           { label: t("common.completed"), value: String(completedSales.length), icon: ShoppingCart, color: "text-purple-600 bg-purple-50" },
@@ -497,14 +497,14 @@ export default function SalesPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("common.search")}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
             />
             <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
           >
             <option value={t("common.all")}>{t("common.all")}</option>
             <option value="completed">{t("common.completed")}</option>
@@ -531,7 +531,7 @@ export default function SalesPage() {
             {sales.length === 0 && (
               <button
                 onClick={openAdd}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33]"
               >
                 <Plus className="h-4 w-4" /> {t("sales.newSale")}
               </button>
@@ -573,7 +573,7 @@ export default function SalesPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <button onClick={() => setPrintSale(sale)} title={t("sales.invoice")} className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"><Printer className="h-4 w-4" /></button>
-                        <button onClick={() => openEdit(sale)} title={t("common.edit")} className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"><Edit2 className="h-4 w-4" /></button>
+                        <button onClick={() => openEdit(sale)} title={t("common.edit")} className="p-1.5 rounded-lg text-gray-400 hover:bg-[#e6f0ed] hover:text-[#00483c] transition-colors"><Edit2 className="h-4 w-4" /></button>
                         <button onClick={() => setDeleteConfirm(sale.id)} title={t("common.delete")} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"><Trash2 className="h-4 w-4" /></button>
                       </div>
                     </td>
@@ -613,7 +613,7 @@ export default function SalesPage() {
                     value={formCustomerName}
                     onChange={(e) => handleCustomerNameChange(e.target.value)}
                     placeholder={t("sales.walkInCustomer")}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                   />
                   <datalist id="customer-suggestions">
                     <option value={t("sales.walkInCustomer")} />
@@ -622,7 +622,7 @@ export default function SalesPage() {
                     ))}
                   </datalist>
                   {formCustomerName.trim() && !formCustomerId && formCustomerName.trim() !== t("sales.walkInCustomer") && (
-                    <p className="text-xs text-indigo-600 mt-1">Un nouveau client sera créé automatiquement</p>
+                    <p className="text-xs text-[#00483c] mt-1">Un nouveau client sera créé automatiquement</p>
                   )}
                   {formCustomerId && (
                     <p className="text-xs text-green-600 mt-1">Client existant sélectionné</p>
@@ -633,7 +633,7 @@ export default function SalesPage() {
                   <select
                     value={formPayment}
                     onChange={(e) => setFormPayment(e.target.value as PaymentMethod)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                   >
                     <option value="cash">{t("sales.cash")}</option>
                     <option value="card">{t("sales.card")}</option>
@@ -646,7 +646,7 @@ export default function SalesPage() {
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as SaleStatus)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                   >
                     <option value="completed">{t("common.completed")}</option>
                     <option value="pending">{t("common.pending")}</option>
@@ -662,7 +662,7 @@ export default function SalesPage() {
                   <label className="block text-sm font-medium text-gray-700">{t("sales.items")} *</label>
                   <button
                     onClick={addItem}
-                    className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+                    className="inline-flex items-center gap-1 text-xs text-[#00483c] hover:text-[#003d33] font-medium"
                   >
                     <Plus className="h-3.5 w-3.5" /> {t("sales.addItem")}
                   </button>
@@ -679,7 +679,7 @@ export default function SalesPage() {
                             <select
                               value={fi.productId}
                               onChange={(e) => handleProductChange(idx, e.target.value)}
-                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                             >
                               <option value="">{t("sales.selectProduct")}</option>
                               {activeProducts.map((p) => {
@@ -710,7 +710,7 @@ export default function SalesPage() {
                                 updated[idx] = { ...updated[idx], qty: e.target.value }
                                 setFormItems(updated)
                               }}
-                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                             />
                           </div>
                           <div className="col-span-3">
@@ -724,7 +724,7 @@ export default function SalesPage() {
                                 updated[idx] = { ...updated[idx], price: e.target.value }
                                 setFormItems(updated)
                               }}
-                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                             />
                           </div>
                           <div className="col-span-1">
@@ -757,7 +757,7 @@ export default function SalesPage() {
                                 updated[idx] = { ...updated[idx], variationId: e.target.value }
                                 setFormItems(updated)
                               }}
-                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                             >
                               <option value="">{t("sales.selectVariation")}</option>
                               {prodVariations.map((v) => (
@@ -780,7 +780,7 @@ export default function SalesPage() {
                   <div className="flex justify-between"><span className="text-gray-500">{t("sales.subtotal")}</span><span className="font-medium">{formatCurrency(subtotal)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">{t("sales.tax")} ({taxRateLabel})</span><span className="font-medium">{formatCurrency(tax)}</span></div>
                   <div className="flex justify-between border-t pt-2 font-semibold">
-                    <span>{t("sales.grandTotal")}</span><span className="text-indigo-600">{formatCurrency(grandTotal)}</span>
+                    <span>{t("sales.grandTotal")}</span><span className="text-[#00483c]">{formatCurrency(grandTotal)}</span>
                   </div>
                 </div>
               )}
@@ -795,7 +795,7 @@ export default function SalesPage() {
               <button
                 onClick={handleSave}
                 disabled={computedItems.length === 0}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33] disabled:opacity-50"
               >
                 {editingSale ? t("common.save") : t("sales.newSale")}
               </button>
@@ -825,7 +825,7 @@ export default function SalesPage() {
             <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
               <h2 className="text-lg font-semibold text-gray-900">{t("sales.invoice")}</h2>
               <div className="flex gap-2">
-                <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"><Printer className="h-4 w-4" /> {t("common.print")}</button>
+                <button onClick={handlePrint} className="inline-flex items-center gap-2 rounded-lg bg-[#00483c] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#003d33]"><Printer className="h-4 w-4" /> {t("common.print")}</button>
                 <button onClick={() => setPrintSale(null)} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-5 w-5 text-gray-500" /></button>
               </div>
             </div>
@@ -865,7 +865,7 @@ export default function SalesPage() {
                       <tr key={i} className="border-b border-gray-100">
                         <td className="py-2">
                           {item.productName}
-                          {variation && <span className="text-xs text-indigo-600 ml-1">({variation.variationType}: {variation.variationValue})</span>}
+                          {variation && <span className="text-xs text-[#00483c] ml-1">({variation.variationType}: {variation.variationValue})</span>}
                         </td>
                         <td className="text-right py-2">{item.quantity}</td>
                         <td className="text-right py-2">{formatCurrency(item.unitPrice)}</td>
@@ -879,7 +879,7 @@ export default function SalesPage() {
                   <tr><td colSpan={3} className="text-right text-gray-500">{t("sales.tax")} ({taxRateLabel})</td><td className="text-right">{formatCurrency(printSale.tax)}</td></tr>
                   <tr className="border-t">
                     <td colSpan={3} className="pt-2 text-right font-bold text-gray-900">{t("common.total")}</td>
-                    <td className="pt-2 text-right font-bold text-indigo-600">{formatCurrency(printSale.total)}</td>
+                    <td className="pt-2 text-right font-bold text-[#00483c]">{formatCurrency(printSale.total)}</td>
                   </tr>
                 </tfoot>
               </table>

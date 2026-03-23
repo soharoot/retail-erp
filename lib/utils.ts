@@ -78,7 +78,7 @@ export function getStatusColor(status: string): string {
     partial: "bg-amber-100 text-amber-700",
     refunded: "bg-gray-100 text-gray-600",
     new: "bg-purple-100 text-purple-700",
-    qualified: "bg-indigo-100 text-indigo-700",
+    qualified: "bg-[#cce0db] text-[#003d33]",
     proposal: "bg-cyan-100 text-cyan-700",
     negotiation: "bg-amber-100 text-amber-700",
     won: "bg-green-100 text-green-700",
@@ -112,7 +112,7 @@ export function getCategoryColor(category: string): string {
     food: "bg-red-100 text-red-700",
     beauty: "bg-rose-100 text-rose-700",
     toys: "bg-cyan-100 text-cyan-700",
-    books: "bg-indigo-100 text-indigo-700",
+    books: "bg-[#cce0db] text-[#003d33]",
     automotive: "bg-slate-100 text-slate-700",
     health: "bg-emerald-100 text-emerald-700",
   }

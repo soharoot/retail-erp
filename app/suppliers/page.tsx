@@ -344,21 +344,21 @@ export default function SuppliersPage() {
                 <input
                   value={form.name}
                   onChange={(e) => { setForm({ ...form, name: e.target.value }); setErrors((prev) => ({ ...prev, name: "" })) }}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.name ? "border-red-300" : "border-gray-200"}`}
+                  className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] ${errors.name ? "border-red-300" : "border-gray-200"}`}
                 />
                 <FormError error={errors.name} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("suppliers.contactPerson")}</label>
-                  <input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.email")}</label>
                   <input
                     value={form.email}
                     onChange={(e) => { setForm({ ...form, email: e.target.value }); setErrors((prev) => ({ ...prev, email: "" })) }}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.email ? "border-red-300" : "border-gray-200"}`}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] ${errors.email ? "border-red-300" : "border-gray-200"}`}
                   />
                   <FormError error={errors.email} />
                 </div>
@@ -367,13 +367,13 @@ export default function SuppliersPage() {
                   <input
                     value={form.phone}
                     onChange={(e) => { setForm({ ...form, phone: e.target.value }); setErrors((prev) => ({ ...prev, phone: "" })) }}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.phone ? "border-red-300" : "border-gray-200"}`}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] ${errors.phone ? "border-red-300" : "border-gray-200"}`}
                   />
                   <FormError error={errors.phone} />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.status")}</label>
-                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
                     <option value="active">{t("common.active")}</option>
                     <option value="inactive">{t("common.inactive")}</option>
                   </select>
@@ -381,11 +381,11 @@ export default function SuppliersPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{t("common.address")}</label>
-                <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t">
                 <button onClick={() => setShowDialog(false)} className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-50">{t("common.cancel")}</button>
-                <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">{editing ? t("common.save") : t("suppliers.addSupplier")}</button>
+                <button onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-[#00483c] rounded-lg hover:bg-[#003d33]">{editing ? t("common.save") : t("suppliers.addSupplier")}</button>
               </div>
             </div>
           </div>

@@ -42,7 +42,7 @@ export default function InvoicingPage() {
 
   const taxRate = (settings.taxRate ?? 0) / 100
   const taxRateLabel = `${settings.taxRate ?? 0}%`
-  const companyName = settings.companyName || "Retail ERP Store"
+  const companyName = settings.companyName || "Enterprise Ledger Store"
 
   // Build sale invoices — exclude cancelled
   const saleInvoices: UnifiedInvoice[] = sales
@@ -137,7 +137,7 @@ export default function InvoicingPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total Invoices", value: String(allInvoices.length), icon: FileText, color: "text-indigo-600 bg-indigo-50" },
+          { label: "Total Invoices", value: String(allInvoices.length), icon: FileText, color: "text-[#00483c] bg-[#e6f0ed]" },
           { label: "Sales Invoices", value: String(saleInvoices.length), icon: ShoppingCart, color: "text-green-600 bg-green-50" },
           { label: "Purchase Invoices", value: String(purchaseInvoices.length), icon: ShoppingBag, color: "text-blue-600 bg-blue-50" },
           { label: "Sales Revenue", value: formatCurrency(totalSalesValue), icon: TrendingUp, color: "text-purple-600 bg-purple-50" },
@@ -175,7 +175,7 @@ export default function InvoicingPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("common.search")}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
             />
             <FileText className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
@@ -232,7 +232,7 @@ export default function InvoicingPage() {
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => setPrintInvoice(inv)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                        className="p-1.5 rounded-lg text-gray-400 hover:bg-[#e6f0ed] hover:text-[#00483c] transition-colors"
                         title={t("common.print")}
                       >
                         <Printer className="h-4 w-4" />
@@ -260,7 +260,7 @@ export default function InvoicingPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#00483c] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#003d33]"
                 >
                   <Printer className="h-4 w-4" /> {t("common.print")}
                 </button>
@@ -345,7 +345,7 @@ export default function InvoicingPage() {
                   )}
                   <tr className="border-t">
                     <td colSpan={3} className="pt-2 text-right font-bold text-gray-900">{t("common.total")}</td>
-                    <td className="pt-2 text-right font-bold text-indigo-600">
+                    <td className="pt-2 text-right font-bold text-[#00483c]">
                       {formatCurrency(printInvoice.total)}
                     </td>
                   </tr>

@@ -50,7 +50,7 @@ export function Header({ onMenuClick }: HeaderProps) {
           <input
             type="text"
             placeholder="Search anything..."
-            className="w-full h-9 pl-10 pr-4 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full h-9 pl-10 pr-4 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#00483c] focus:border-transparent"
           />
         </div>
       </div>
@@ -108,7 +108,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             <p className="text-sm font-medium text-gray-900">{displayName}</p>
             <p className="text-xs text-gray-500">{displayEmail}</p>
           </div>
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#cce0db] text-[#00483c]">
             <User className="h-4 w-4" />
           </div>
           <button

@@ -203,7 +203,7 @@ export default function InventoryPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: t("inventory.totalItems"), value: totalItems, icon: Warehouse, color: "text-indigo-600 bg-indigo-50" },
+          { label: t("inventory.totalItems"), value: totalItems, icon: Warehouse, color: "text-[#00483c] bg-[#e6f0ed]" },
           { label: t("inventory.totalUnits"), value: totalUnits.toLocaleString("fr-FR"), icon: Warehouse, color: "text-blue-600 bg-blue-50" },
           { label: t("inventory.lowStockAlerts"), value: lowStockCount + outOfStockCount, icon: AlertTriangle, color: "text-yellow-600 bg-yellow-50" },
           { label: t("inventory.inventoryValue"), value: formatCurrency(inventoryValue), icon: Warehouse, color: "text-green-600 bg-green-50" },
@@ -228,14 +228,14 @@ export default function InventoryPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t("common.search")}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
             />
             <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
           <select
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
           >
             <option value={t("common.all")}>{t("common.all")}</option>
             <option value="En stock">{t("inventory.inStock")}</option>
@@ -292,7 +292,7 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-4 py-3">
                         {item.categoryName && (
-                          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                          <span className="rounded-full bg-[#e6f0ed] px-2.5 py-1 text-xs font-medium text-[#003d33]">
                             {item.categoryName}
                           </span>
                         )}
@@ -330,7 +330,7 @@ export default function InventoryPage() {
                       <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => { setAdjustItem(item); setAdjustError("") }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-[#e6f0ed] hover:text-[#00483c] hover:border-[#99c1b6] transition-colors"
                         >
                           {t("inventory.adjustStock")}
                         </button>
@@ -361,7 +361,7 @@ export default function InventoryPage() {
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="font-medium text-gray-900">{adjustItem.productName}</p>
                 {adjustItem.variationLabel && (
-                  <p className="text-sm text-indigo-600 mt-0.5">{adjustItem.variationLabel}</p>
+                  <p className="text-sm text-[#00483c] mt-0.5">{adjustItem.variationLabel}</p>
                 )}
                 <p className="text-sm text-gray-500 mt-0.5">{t("inventory.currentStock")} : <strong>{adjustItem.stock}</strong></p>
               </div>
@@ -381,7 +381,7 @@ export default function InventoryPage() {
                     type="number"
                     value={adjustAmount}
                     onChange={(e) => { setAdjustAmount(e.target.value); setAdjustError("") }}
-                    className="flex-1 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-center font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="flex-1 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-center font-medium focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                     placeholder="0"
                   />
                   <button
@@ -392,7 +392,7 @@ export default function InventoryPage() {
                   </button>
                 </div>
                 {adjustAmount && !adjustError && (
-                  <p className="text-xs text-indigo-600 mt-1.5">
+                  <p className="text-xs text-[#00483c] mt-1.5">
                     {t("inventory.newStock")} : {Math.max(0, adjustItem.stock + (parseInt(adjustAmount) || 0))}
                   </p>
                 )}
@@ -403,7 +403,7 @@ export default function InventoryPage() {
                 <input
                   value={adjustReason}
                   onChange={(e) => setAdjustReason(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                   placeholder="ex: Correction après inventaire physique"
                 />
               </div>
@@ -418,7 +418,7 @@ export default function InventoryPage() {
               <button
                 onClick={handleAdjust}
                 disabled={!adjustAmount || adjustAmount === "0"}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33] disabled:opacity-50"
               >
                 {t("common.save")}
               </button>

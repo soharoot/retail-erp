@@ -67,37 +67,37 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
       {/* Sidebar */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex flex-col bg-white border-r border-gray-200 transition-all duration-300",
+          "fixed inset-y-0 left-0 z-50 flex flex-col bg-[#00483c] transition-all duration-300",
           collapsed ? "w-[70px]" : "w-64",
           open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
         {/* Logo */}
         <div className={cn(
-          "flex items-center h-16 px-4 border-b border-gray-200",
+          "flex items-center h-16 px-4 border-b border-white/10",
           collapsed ? "justify-center" : "justify-between"
         )}>
           {!collapsed && (
             <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white">
                 <LayoutDashboard className="h-4 w-4" />
               </div>
               <div>
-                <h1 className="text-sm font-bold text-gray-900">ERP Algérie</h1>
-                <p className="text-[10px] text-gray-500">Gestion commerciale</p>
+                <h1 className="text-sm font-bold text-white">Ledger ERP</h1>
+                <p className="text-[10px] text-white/60">Retail & Wholesale</p>
               </div>
             </Link>
           )}
           {collapsed && (
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white">
               <LayoutDashboard className="h-4 w-4" />
             </div>
           )}
           <button
             onClick={onClose}
-            className="lg:hidden p-1 rounded-md hover:bg-gray-100"
+            className="lg:hidden p-1 rounded-md hover:bg-white/10"
           >
-            <X className="h-5 w-5 text-gray-500" />
+            <X className="h-5 w-5 text-white/70" />
           </button>
         </div>
 
@@ -121,12 +121,12 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-indigo-600 text-white"
-                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:hover:bg-gray-700 dark:hover:text-white",
+                        ? "bg-white/15 text-white"
+                        : "text-white/70 hover:bg-white/10 hover:text-white",
                       collapsed && "justify-center px-2"
                     )}
                   >
-                    <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive ? "text-white" : "text-gray-400")} />
+                    <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive ? "text-white" : "text-white/50")} />
                     {!collapsed && <span>{label}</span>}
                   </Link>
                 </li>
@@ -136,10 +136,10 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         </nav>
 
         {/* Collapse toggle - desktop only */}
-        <div className="hidden lg:flex items-center justify-center p-3 border-t border-gray-200">
+        <div className="hidden lg:flex items-center justify-center p-3 border-t border-white/10">
           <button
             onClick={onToggleCollapse}
-            className="flex items-center justify-center w-full rounded-lg py-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            className="flex items-center justify-center w-full rounded-lg py-2 text-white/50 hover:bg-white/10 hover:text-white transition-colors"
           >
             <ChevronLeft className={cn("h-5 w-5 transition-transform", collapsed && "rotate-180")} />
           </button>
@@ -147,9 +147,9 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
 
         {/* Version */}
         {!collapsed && (
-          <div className="px-4 py-3 border-t border-gray-200">
-            <p className="text-xs text-gray-400">Version du système</p>
-            <p className="text-xs font-medium text-gray-600">v2.0.0</p>
+          <div className="px-4 py-3 border-t border-white/10">
+            <p className="text-xs text-white/40">Version du système</p>
+            <p className="text-xs font-medium text-white/70">v2.0.0</p>
           </div>
         )}
       </aside>

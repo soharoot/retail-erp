@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { Inter, Public_Sans } from "next/font/google"
 import "./globals.css"
 import { AppShell } from "@/components/layout/app-shell"
 import { AuthProvider } from "@/lib/supabase/auth-context"
@@ -13,9 +13,15 @@ const inter = Inter({
   variable: "--font-inter",
 })
 
+const publicSans = Public_Sans({
+  subsets: ["latin"],
+  variable: "--font-public-sans",
+  weight: ["400", "500", "600", "700"],
+})
+
 export const metadata: Metadata = {
-  title: "Retail ERP - Business Management System",
-  description: "Professional Enterprise Resource Planning system for business management",
+  title: "Enterprise Ledger - Retail & Wholesale ERP",
+  description: "SaaS ERP platform for Algerian retail, wholesale, and e-commerce businesses",
 }
 
 export default function RootLayout({
@@ -25,7 +31,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased`}>
+      <body className={`${inter.variable} ${publicSans.variable} font-sans antialiased`}>
         <AuthProvider>
           <OfflineProvider>
             <ThemeProvider>

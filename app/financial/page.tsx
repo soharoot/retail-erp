@@ -92,7 +92,7 @@ export default function FinancialPage() {
             title: t("financial.revenue"),
             value: formatCurrency(revenue),
             icon: DollarSign,
-            color: "text-indigo-600 bg-indigo-50",
+            color: "text-[#00483c] bg-[#e6f0ed]",
             sub: `${completedSales.length} completed sales`,
           },
           {
@@ -153,7 +153,7 @@ export default function FinancialPage() {
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.id
-                ? "border-indigo-600 text-indigo-600"
+                ? "border-[#00483c] text-[#00483c]"
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -166,7 +166,7 @@ export default function FinancialPage() {
       {activeTab === "pnl" && (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-indigo-600" />
+            <BarChart3 className="h-4 w-4 text-[#00483c]" />
             Revenue vs COGS — Last 6 Months
           </h3>
           {pnlData.every((d) => d.revenue === 0) ? (
@@ -176,7 +176,7 @@ export default function FinancialPage() {
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-4 mb-2 text-xs">
-                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-indigo-500" /> Revenue</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-[#00483c]" /> Revenue</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-red-400" /> COGS</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-green-400" /> Profit</span>
               </div>
@@ -186,7 +186,7 @@ export default function FinancialPage() {
                     <span className="w-8 text-gray-500 text-right">{d.label}</span>
                     <div className="flex-1 space-y-1">
                       <div className="flex items-center gap-1">
-                        <div className="h-3 rounded-sm bg-indigo-500 min-w-[2px]" style={{ width: `${(d.revenue / maxPnl) * 100}%` }} />
+                        <div className="h-3 rounded-sm bg-[#00483c] min-w-[2px]" style={{ width: `${(d.revenue / maxPnl) * 100}%` }} />
                         <span className="text-gray-500">{formatCurrency(d.revenue)}</span>
                       </div>
                       <div className="flex items-center gap-1">

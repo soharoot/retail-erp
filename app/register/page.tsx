@@ -74,10 +74,10 @@ export default function RegisterPage() {
   // ── Email verification screen ──────────────────────────────
   if (verificationSent) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#e6f0ed] via-white to-[#cfe6f2] p-4">
         <div className="w-full max-w-md">
           <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-indigo-100 text-indigo-600 mb-5">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[#cce0db] text-[#00483c] mb-5">
               <MailCheck className="h-8 w-8" />
             </div>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Check your email</h2>
@@ -90,13 +90,13 @@ export default function RegisterPage() {
             </p>
             <Link
               href="/login"
-              className="inline-flex items-center justify-center w-full py-2.5 px-4 text-sm font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
+              className="inline-flex items-center justify-center w-full py-2.5 px-4 text-sm font-medium text-[#00483c] border border-[#99c1b6] rounded-lg hover:bg-[#e6f0ed] transition-colors"
             >
               Back to sign in
             </Link>
           </div>
           <p className="text-center text-xs text-gray-400 mt-6">
-            Retail ERP v1.0 &mdash; Enterprise Resource Planning
+            Enterprise Ledger v2.0 &mdash; Enterprise Resource Planning
           </p>
         </div>
       </div>
@@ -105,15 +105,15 @@ export default function RegisterPage() {
 
   // ── Registration form ──────────────────────────────────────
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#e6f0ed] via-white to-[#cfe6f2] p-4">
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-indigo-600 text-white mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-[#00483c] text-white mb-4">
             <UserPlus className="h-7 w-7" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Create Account</h1>
-          <p className="text-sm text-gray-500 mt-1">Get started with Retail ERP</p>
+          <p className="text-sm text-gray-500 mt-1">Get started with Enterprise Ledger</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
@@ -122,7 +122,7 @@ export default function RegisterPage() {
             type="button"
             onClick={handleGoogleSignUp}
             disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-5"
+            className="w-full flex items-center justify-center gap-3 py-2.5 px-4 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00483c] disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-5"
           >
             {googleLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -167,7 +167,7 @@ export default function RegisterPage() {
                   placeholder="John Doe"
                   required
                   autoComplete="name"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] focus:border-transparent"
                 />
               </div>
             </div>
@@ -183,7 +183,7 @@ export default function RegisterPage() {
                   placeholder="you@company.com"
                   required
                   autoComplete="email"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] focus:border-transparent"
                 />
               </div>
             </div>
@@ -200,7 +200,7 @@ export default function RegisterPage() {
                   required
                   minLength={8}
                   autoComplete="new-password"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] focus:border-transparent"
                 />
               </div>
             </div>
@@ -217,7 +217,7 @@ export default function RegisterPage() {
                   required
                   minLength={8}
                   autoComplete="new-password"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] focus:border-transparent"
                 />
               </div>
             </div>
@@ -225,7 +225,7 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
+              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-medium text-white bg-[#00483c] rounded-lg hover:bg-[#003d33] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#00483c] disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
             >
               {loading ? (
                 <>
@@ -244,7 +244,7 @@ export default function RegisterPage() {
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-500">
               Already have an account?{" "}
-              <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-700">
+              <Link href="/login" className="font-medium text-[#00483c] hover:text-[#003d33]">
                 Sign in
               </Link>
             </p>
@@ -252,7 +252,7 @@ export default function RegisterPage() {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Retail ERP v1.0 &mdash; Enterprise Resource Planning
+          Enterprise Ledger v2.0 &mdash; Enterprise Resource Planning
         </p>
       </div>
     </div>

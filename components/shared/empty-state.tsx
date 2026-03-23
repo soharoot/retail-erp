@@ -22,7 +22,7 @@ export function EmptyState({ title, description, action }: EmptyStateProps) {
       {action && (
         <button
           onClick={action.onClick}
-          className="mt-4 inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+          className="mt-4 inline-flex items-center rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33] transition-colors"
         >
           {action.label}
         </button>

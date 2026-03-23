@@ -410,7 +410,7 @@ export default function UsersPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00483c]" />
       </div>
     )
   }
@@ -453,7 +453,7 @@ export default function UsersPage() {
               onClick={() => setActiveTab(tab.id)}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.id
-                  ? "border-indigo-600 text-indigo-600"
+                  ? "border-[#00483c] text-[#00483c]"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -482,7 +482,7 @@ export default function UsersPage() {
                     <tr key={member.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-sm font-bold">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#cce0db] text-[#00483c] text-sm font-bold">
                             {(member.profile_name ?? "?")
                               .split(" ")
                               .map((n) => n[0])
@@ -570,7 +570,7 @@ export default function UsersPage() {
                     setRoleForm({ name: "", description: "", permissions: [] })
                     setShowRoleDialog(true)
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700"
+                  className="flex items-center gap-2 px-4 py-2 bg-[#00483c] text-white text-sm font-medium rounded-lg hover:bg-[#003d33]"
                 >
                   <Plus className="h-4 w-4" />
                   {t("rbac.createRole")}
@@ -657,7 +657,7 @@ export default function UsersPage() {
               <div className="divide-y divide-gray-100">
                 {activityLogs.map((log) => (
                   <div key={log.id} className="flex items-center gap-4 px-4 py-3 hover:bg-gray-50">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 text-xs font-bold flex-shrink-0">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#cce0db] text-[#00483c] text-xs font-bold flex-shrink-0">
                       {(log.user_name ?? "?")
                         .split(/[\s@]+/)
                         .map((n: string) => n[0])
@@ -703,7 +703,7 @@ export default function UsersPage() {
                     value={inviteForm.email}
                     onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
                     placeholder="staff@example.com"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                   />
                 </div>
                 <div>
@@ -711,7 +711,7 @@ export default function UsersPage() {
                   <select
                     value={inviteForm.role_id}
                     onChange={(e) => setInviteForm({ ...inviteForm, role_id: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                   >
                     {roles.map((r) => (
                       <option key={r.id} value={r.id}>
@@ -730,7 +730,7 @@ export default function UsersPage() {
                   </button>
                   <button
                     onClick={handleInvite}
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                    className="px-4 py-2 text-sm font-medium text-white bg-[#00483c] rounded-lg hover:bg-[#003d33]"
                   >
                     {t("rbac.sendInvite")}
                   </button>
@@ -759,7 +759,7 @@ export default function UsersPage() {
                   <select
                     value={editingMember.role_id ?? ""}
                     onChange={(e) => setEditingMember({ ...editingMember, role_id: e.target.value })}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                   >
                     {roles.map((r) => (
                       <option key={r.id} value={r.id}>
@@ -777,7 +777,7 @@ export default function UsersPage() {
                   </button>
                   <button
                     onClick={handleUpdateMemberRole}
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                    className="px-4 py-2 text-sm font-medium text-white bg-[#00483c] rounded-lg hover:bg-[#003d33]"
                   >
                     {t("common.save")}
                   </button>
@@ -807,7 +807,7 @@ export default function UsersPage() {
                       value={roleForm.name}
                       onChange={(e) => setRoleForm({ ...roleForm, name: e.target.value })}
                       placeholder="e.g. Cashier"
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                       disabled={editingRole?.is_system}
                     />
                   </div>
@@ -817,7 +817,7 @@ export default function UsersPage() {
                       value={roleForm.description}
                       onChange={(e) => setRoleForm({ ...roleForm, description: e.target.value })}
                       placeholder="Short description..."
-                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                     />
                   </div>
                 </div>
@@ -849,7 +849,7 @@ export default function UsersPage() {
                                       type="checkbox"
                                       checked={checked}
                                       onChange={() => togglePermission(code)}
-                                      className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                      className="h-4 w-4 rounded border-gray-300 text-[#00483c] focus:ring-[#00483c]"
                                     />
                                   ) : (
                                     <span className="text-gray-300">—</span>
@@ -874,7 +874,7 @@ export default function UsersPage() {
                         permissions: allPermissions.map((p) => p.code),
                       })
                     }
-                    className="px-3 py-1.5 text-xs font-medium text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50"
+                    className="px-3 py-1.5 text-xs font-medium text-[#00483c] border border-[#99c1b6] rounded-lg hover:bg-[#e6f0ed]"
                   >
                     {t("rbac.selectAll")}
                   </button>
@@ -908,7 +908,7 @@ export default function UsersPage() {
                   </button>
                   <button
                     onClick={handleSaveRole}
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                    className="px-4 py-2 text-sm font-medium text-white bg-[#00483c] rounded-lg hover:bg-[#003d33]"
                   >
                     {editingRole ? t("common.save") : t("rbac.createRole")}
                   </button>

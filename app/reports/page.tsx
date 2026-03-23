@@ -118,7 +118,7 @@ export default function ReportsPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: t("reports.totalRevenue"), value: formatCurrency(totalRevenue), icon: TrendingUp, color: "text-indigo-600 bg-indigo-50" },
+          { label: t("reports.totalRevenue"), value: formatCurrency(totalRevenue), icon: TrendingUp, color: "text-[#00483c] bg-[#e6f0ed]" },
           { label: t("reports.totalOrders"), value: String(totalOrders), icon: ShoppingCart, color: "text-blue-600 bg-blue-50" },
           { label: t("reports.avgOrderValue"), value: formatCurrency(avgOrderValue), icon: BarChart3, color: "text-purple-600 bg-purple-50" },
           { label: t("reports.topCustomer"), value: topCustomer ? topCustomer[0] : "—", icon: Users, color: "text-green-600 bg-green-50" },
@@ -143,7 +143,7 @@ export default function ReportsPage() {
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === tab.id
-                ? "border-indigo-600 text-indigo-600"
+                ? "border-[#00483c] text-[#00483c]"
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -168,7 +168,7 @@ export default function ReportsPage() {
                   <span className="w-16 text-gray-500 text-right text-xs">{m.label}</span>
                   <div className="flex-1 flex items-center gap-2">
                     <div
-                      className="h-6 rounded bg-indigo-500 min-w-[4px] transition-all"
+                      className="h-6 rounded bg-[#00483c] min-w-[4px] transition-all"
                       style={{ width: `${(m.revenue / maxRevenue) * 100}%` }}
                     />
                     <span className="text-gray-700 font-medium">{formatCurrency(m.revenue)}</span>
@@ -254,7 +254,7 @@ export default function ReportsPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${pct}%` }} />
+                              <div className="h-full bg-[#00483c] rounded-full" style={{ width: `${pct}%` }} />
                             </div>
                             <span className="text-xs text-gray-400 w-8">{pct}%</span>
                           </div>

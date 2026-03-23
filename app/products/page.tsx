@@ -462,7 +462,7 @@ export default function ProductsPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: t("products.totalProducts"), value: totalProducts, icon: Package, color: "text-indigo-600 bg-indigo-50" },
+          { label: t("products.totalProducts"), value: totalProducts, icon: Package, color: "text-[#00483c] bg-[#e6f0ed]" },
           { label: t("products.activeProducts"), value: activeCount, icon: Package, color: "text-green-600 bg-green-50" },
           { label: t("products.categories"), value: totalCategories, icon: Tag, color: "text-purple-600 bg-purple-50" },
           { label: t("products.lowStock"), value: lowStockCount, icon: Package, color: lowStockCount > 0 ? "text-amber-600 bg-amber-50" : "text-gray-600 bg-gray-50" },
@@ -481,10 +481,10 @@ export default function ProductsPage() {
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("common.search")} className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("common.search")} className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
             <Package className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           </div>
-          <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
             <option value="All">{t("products.allCategories")}</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
@@ -511,7 +511,7 @@ export default function ProductsPage() {
             <p className="text-gray-500 font-medium">{t("common.noData")}</p>
             <p className="text-sm text-gray-400 mt-1">{activeProducts.length === 0 ? t("products.addFirstProduct") : t("products.adjustSearch")}</p>
             {activeProducts.length === 0 && (
-              <button onClick={openAdd} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+              <button onClick={openAdd} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33]">
                 <Plus className="h-4 w-4" /> {t("products.addProduct")}
               </button>
             )}
@@ -547,7 +547,7 @@ export default function ProductsPage() {
                           {product.description && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{product.description}</p>}
                         </div>
                       </td>
-                      <td className="px-4 py-3">{catName && <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">{catName}</span>}</td>
+                      <td className="px-4 py-3">{catName && <span className="rounded-full bg-[#e6f0ed] px-2.5 py-1 text-xs font-medium text-[#003d33]">{catName}</span>}</td>
                       <td className="px-4 py-3">{subCatName && <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">{subCatName}</span>}</td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(product.price ?? 0)}</td>
                       <td className="px-4 py-3 text-center">
@@ -566,7 +566,7 @@ export default function ProductsPage() {
                             </button>
                           ) : (
                             <>
-                              <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors" title={t("products.editProduct")}><Edit2 className="h-4 w-4" /></button>
+                              <button onClick={() => openEdit(product)} className="p-1.5 rounded-lg text-gray-400 hover:bg-[#e6f0ed] hover:text-[#00483c] transition-colors" title={t("products.editProduct")}><Edit2 className="h-4 w-4" /></button>
                               <button onClick={() => setDeleteConfirm(product.id)} className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors" title={t("products.deleteProduct")}><Trash2 className="h-4 w-4" /></button>
                             </>
                           )}
@@ -593,13 +593,13 @@ export default function ProductsPage() {
               {warnings.map((w, i) => <FormWarning key={i} message={w} />)}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.productName")} *</label>
-                <input value={form.name ?? ""} onChange={(e) => { setForm({ ...form, name: e.target.value }); setErrors((p) => ({ ...p, name: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.name ? "border-red-300" : "border-gray-200"}`} placeholder="ex: Smartphone Samsung A54" />
+                <input value={form.name ?? ""} onChange={(e) => { setForm({ ...form, name: e.target.value }); setErrors((p) => ({ ...p, name: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] ${errors.name ? "border-red-300" : "border-gray-200"}`} placeholder="ex: Smartphone Samsung A54" />
                 <FormError error={errors.name} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.category")} *</label>
-                  <select value={form.categoryId} onChange={(e) => { setForm({ ...form, categoryId: e.target.value, subCategoryId: "" }); setErrors((p) => ({ ...p, category: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.category ? "border-red-300" : "border-gray-200"}`}>
+                  <select value={form.categoryId} onChange={(e) => { setForm({ ...form, categoryId: e.target.value, subCategoryId: "" }); setErrors((p) => ({ ...p, category: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] ${errors.category ? "border-red-300" : "border-gray-200"}`}>
                     <option value="">{t("products.selectCategory")}</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -607,7 +607,7 @@ export default function ProductsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.subCategory")}</label>
-                  <select value={form.subCategoryId} onChange={(e) => setForm({ ...form, subCategoryId: e.target.value })} disabled={!form.categoryId} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                  <select value={form.subCategoryId} onChange={(e) => setForm({ ...form, subCategoryId: e.target.value })} disabled={!form.categoryId} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] disabled:opacity-50">
                     <option value="">{t("products.selectSubCategory")}</option>
                     {filteredSubCats.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
@@ -615,16 +615,16 @@ export default function ProductsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.sellingPrice")} *</label>
-                <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => { setForm({ ...form, price: e.target.value }); setErrors((p) => ({ ...p, price: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.price ? "border-red-300" : "border-gray-200"}`} placeholder="0.00" />
+                <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => { setForm({ ...form, price: e.target.value }); setErrors((p) => ({ ...p, price: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] ${errors.price ? "border-red-300" : "border-gray-200"}`} placeholder="0.00" />
                 <FormError error={errors.price} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.description")}</label>
-                <textarea value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Description optionnelle du produit" />
+                <textarea value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" placeholder="Description optionnelle du produit" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.status")}</label>
-                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as "active" | "inactive" })} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
                   <option value="active">{t("common.active")}</option>
                   <option value="inactive">{t("common.inactive")}</option>
                 </select>
@@ -634,7 +634,7 @@ export default function ProductsPage() {
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <label className="text-sm font-medium text-gray-700">{t("products.variations")}</label>
-                  <button onClick={addVariationRow} className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700">
+                  <button onClick={addVariationRow} className="flex items-center gap-1 text-xs font-medium text-[#00483c] hover:text-[#003d33]">
                     <Plus className="h-3.5 w-3.5" /> {t("products.addVariation")}
                   </button>
                 </div>
@@ -653,15 +653,15 @@ export default function ProductsPage() {
                   const typeValues = selectedType ? (valuesByType.get(selectedType.id) ?? []) : []
                   return (
                     <div key={idx} className="flex gap-2 items-start mb-2">
-                      <select value={v.variationType} onChange={(e) => { updateVariationRow(idx, "variationType", e.target.value); updateVariationRow(idx, "variationValue", "") }} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <select value={v.variationType} onChange={(e) => { updateVariationRow(idx, "variationType", e.target.value); updateVariationRow(idx, "variationValue", "") }} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
                         <option value="">{t("products.variationType")}</option>
                         {variationTypes.map((vt) => <option key={vt.id} value={vt.name}>{vt.name}</option>)}
                       </select>
-                      <select value={v.variationValue} onChange={(e) => updateVariationRow(idx, "variationValue", e.target.value)} disabled={!v.variationType} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                      <select value={v.variationValue} onChange={(e) => updateVariationRow(idx, "variationValue", e.target.value)} disabled={!v.variationType} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] disabled:opacity-50">
                         <option value="">{t("products.variationValue")}</option>
                         {typeValues.map((tv) => <option key={tv.id} value={tv.value}>{tv.value}</option>)}
                       </select>
-                      <input type="number" min="0" value={v.stock} onChange={(e) => updateVariationRow(idx, "stock", e.target.value)} placeholder="Stock" className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      <input type="number" min="0" value={v.stock} onChange={(e) => updateVariationRow(idx, "stock", e.target.value)} placeholder="Stock" className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
                       <button onClick={() => removeVariationRow(idx)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Minus className="h-4 w-4" /></button>
                     </div>
                   )
@@ -671,7 +671,7 @@ export default function ProductsPage() {
             </div>
             <div className="flex justify-end gap-3 border-t border-gray-100 px-6 py-4 flex-shrink-0">
               <button onClick={() => setShowModal(false)} className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">{t("common.cancel")}</button>
-              <button onClick={handleSave} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{editingProduct ? t("common.save") : t("products.addProduct")}</button>
+              <button onClick={handleSave} className="rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33]">{editingProduct ? t("common.save") : t("products.addProduct")}</button>
             </div>
           </div>
         </div>
@@ -704,8 +704,8 @@ export default function ProductsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.addCategory")}</label>
                 <div className="flex gap-2">
-                  <input value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCatError("") }} placeholder={t("products.categoryName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                  <button onClick={handleAddCategory} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.add")}</button>
+                  <input value={newCategoryName} onChange={(e) => { setNewCategoryName(e.target.value); setCatError("") }} placeholder={t("products.categoryName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
+                  <button onClick={handleAddCategory} className="rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33]">{t("common.add")}</button>
                 </div>
               </div>
               <div className="space-y-3">
@@ -734,12 +734,12 @@ export default function ProductsPage() {
               <div className="border-t pt-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.addSubCategory")}</label>
                 <div className="flex gap-2">
-                  <select value={selectedCategoryForSub} onChange={(e) => setSelectedCategoryForSub(e.target.value)} className="w-1/3 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <select value={selectedCategoryForSub} onChange={(e) => setSelectedCategoryForSub(e.target.value)} className="w-1/3 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
                     <option value="">{t("common.category")}</option>
                     {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
-                  <input value={newSubCategoryName} onChange={(e) => { setNewSubCategoryName(e.target.value); setCatError("") }} placeholder={t("products.subCategoryName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                  <button onClick={handleAddSubCategory} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.add")}</button>
+                  <input value={newSubCategoryName} onChange={(e) => { setNewSubCategoryName(e.target.value); setCatError("") }} placeholder={t("products.subCategoryName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
+                  <button onClick={handleAddSubCategory} className="rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33]">{t("common.add")}</button>
                 </div>
               </div>
             </div>
@@ -773,8 +773,8 @@ export default function ProductsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.addVariationType")}</label>
                 <div className="flex gap-2">
-                  <input value={newTypeName} onChange={(e) => { setNewTypeName(e.target.value); setVarError("") }} placeholder={t("products.variationTypeName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                  <button onClick={handleAddVariationType} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.add")}</button>
+                  <input value={newTypeName} onChange={(e) => { setNewTypeName(e.target.value); setVarError("") }} placeholder={t("products.variationTypeName")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
+                  <button onClick={handleAddVariationType} className="rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33]">{t("common.add")}</button>
                 </div>
               </div>
 
@@ -791,7 +791,7 @@ export default function ProductsPage() {
                       {vals.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {vals.map((val) => (
-                            <span key={val.id} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                            <span key={val.id} className="inline-flex items-center gap-1 rounded-full bg-[#e6f0ed] px-2.5 py-1 text-xs font-medium text-[#003d33]">
                               {val.value}
                               <button onClick={() => handleDeleteVariationValue(val.id)} className="hover:text-red-500 ml-0.5">
                                 <X className="h-3 w-3" />
@@ -811,12 +811,12 @@ export default function ProductsPage() {
                 <div className="border-t pt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.addVariationValue")}</label>
                   <div className="flex gap-2">
-                    <select value={selectedTypeForValue} onChange={(e) => setSelectedTypeForValue(e.target.value)} className="w-1/3 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <select value={selectedTypeForValue} onChange={(e) => setSelectedTypeForValue(e.target.value)} className="w-1/3 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
                       <option value="">{t("products.selectVariationType")}</option>
                       {variationTypes.map((vt) => <option key={vt.id} value={vt.id}>{vt.name}</option>)}
                     </select>
-                    <input value={newValueName} onChange={(e) => { setNewValueName(e.target.value); setVarError("") }} placeholder={t("products.variationValue")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    <button onClick={handleAddVariationValue} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">{t("common.add")}</button>
+                    <input value={newValueName} onChange={(e) => { setNewValueName(e.target.value); setVarError("") }} placeholder={t("products.variationValue")} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
+                    <button onClick={handleAddVariationValue} className="rounded-lg bg-[#00483c] px-4 py-2 text-sm font-medium text-white hover:bg-[#003d33]">{t("common.add")}</button>
                   </div>
                 </div>
               )}

@@ -52,7 +52,7 @@ export default function SettingsPage() {
     { id: "system", label: "Système", icon: Database },
   ]
 
-  const inputClass = "w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+  const inputClass = "w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
   const labelClass = "block text-sm font-medium text-gray-700 mb-1.5"
 
   if (settingsLoading) {
@@ -73,7 +73,7 @@ export default function SettingsPage() {
         <div className="lg:w-56 flex-shrink-0">
           <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
             {tabs.map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${activeTab === tab.id ? "bg-indigo-50 text-indigo-600 border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-50"}`}>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${activeTab === tab.id ? "bg-[#e6f0ed] text-[#00483c] border-r-2 border-[#00483c]" : "text-gray-600 hover:bg-gray-50"}`}>
                 <tab.icon className="h-4 w-4" />
                 {tab.label}
               </button>
@@ -147,7 +147,7 @@ export default function SettingsPage() {
                   <div className="flex flex-wrap gap-3">
                     {["Espèces", "Carte de crédit", "Virement bancaire", "Chèque"].map(m => (
                       <label key={m} className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                        <input type="checkbox" defaultChecked className="rounded text-indigo-600 focus:ring-indigo-500" /><span className="text-sm text-gray-700">{m}</span>
+                        <input type="checkbox" defaultChecked className="rounded text-[#00483c] focus:ring-[#00483c]" /><span className="text-sm text-gray-700">{m}</span>
                       </label>
                     ))}
                   </div>
@@ -170,7 +170,7 @@ export default function SettingsPage() {
                   ].map(item => (
                     <div key={item.key} className="flex items-center justify-between py-3 border-b border-gray-100">
                       <div><p className="text-sm font-medium text-gray-900">{item.label}</p><p className="text-xs text-gray-500">{item.desc}</p></div>
-                      <button onClick={() => setField({ [item.key]: !settings[item.key as keyof typeof settings] })} className={`relative w-11 h-6 rounded-full transition-colors ${settings[item.key as keyof typeof settings] ? "bg-indigo-600" : "bg-gray-200"}`}>
+                      <button onClick={() => setField({ [item.key]: !settings[item.key as keyof typeof settings] })} className={`relative w-11 h-6 rounded-full transition-colors ${settings[item.key as keyof typeof settings] ? "bg-[#00483c]" : "bg-gray-200"}`}>
                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings[item.key as keyof typeof settings] ? "translate-x-5" : ""}`} />
                       </button>
                     </div>
@@ -201,7 +201,7 @@ export default function SettingsPage() {
                         onClick={() => setPreferences({ ...preferences, theme: opt.value })}
                         className={`flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-colors ${
                           preferences.theme === opt.value
-                            ? "border-indigo-500 bg-indigo-50"
+                            ? "border-[#00483c] bg-[#e6f0ed]"
                             : "border-gray-200 hover:border-gray-300"
                         }`}
                       >
@@ -227,7 +227,7 @@ export default function SettingsPage() {
                         onClick={() => setPreferences({ ...preferences, interfaceStyle: opt.value })}
                         className={`flex flex-col items-start gap-1 p-3 rounded-xl border-2 text-left transition-colors ${
                           preferences.interfaceStyle === opt.value
-                            ? "border-indigo-500 bg-indigo-50"
+                            ? "border-[#00483c] bg-[#e6f0ed]"
                             : "border-gray-200 hover:border-gray-300"
                         }`}
                       >
@@ -252,7 +252,7 @@ export default function SettingsPage() {
                         onClick={() => setPreferences({ ...preferences, dashboardLayout: opt.value })}
                         className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-colors ${
                           preferences.dashboardLayout === opt.value
-                            ? "border-indigo-500 bg-indigo-50 text-indigo-600"
+                            ? "border-[#00483c] bg-[#e6f0ed] text-[#00483c]"
                             : "border-gray-200 text-gray-600 hover:border-gray-300"
                         }`}
                       >
@@ -276,7 +276,7 @@ export default function SettingsPage() {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between py-3 border-b border-gray-100">
                     <div><p className="text-sm font-medium text-gray-900">Sauvegarde automatique</p><p className="text-xs text-gray-500">Sauvegarde quotidienne de toutes les données</p></div>
-                    <button onClick={() => setField({ autoBackup: !settings.autoBackup })} className={`relative w-11 h-6 rounded-full transition-colors ${settings.autoBackup ? "bg-indigo-600" : "bg-gray-200"}`}>
+                    <button onClick={() => setField({ autoBackup: !settings.autoBackup })} className={`relative w-11 h-6 rounded-full transition-colors ${settings.autoBackup ? "bg-[#00483c]" : "bg-gray-200"}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.autoBackup ? "translate-x-5" : ""}`} />
                     </button>
                   </div>
@@ -285,7 +285,7 @@ export default function SettingsPage() {
                       <p className="text-sm font-medium text-gray-900">Authentification à deux facteurs</p>
                       <p className="text-xs text-gray-500">Nécessite la configuration de Supabase Auth</p>
                     </div>
-                    <button onClick={() => setField({ twoFactor: !settings.twoFactor })} className={`relative w-11 h-6 rounded-full transition-colors ${settings.twoFactor ? "bg-indigo-600" : "bg-gray-200"}`}>
+                    <button onClick={() => setField({ twoFactor: !settings.twoFactor })} className={`relative w-11 h-6 rounded-full transition-colors ${settings.twoFactor ? "bg-[#00483c]" : "bg-gray-200"}`}>
                       <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.twoFactor ? "translate-x-5" : ""}`} />
                     </button>
                   </div>
@@ -305,7 +305,7 @@ export default function SettingsPage() {
             {/* Save Button */}
             <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t">
               {saved && <span className="text-sm text-green-600 font-medium">Paramètres enregistrés avec succès !</span>}
-              <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors">
+              <button onClick={handleSave} className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-[#00483c] rounded-lg hover:bg-[#003d33] transition-colors">
                 <Save className="h-4 w-4" />{t("settings.saveChanges")}
               </button>
             </div>

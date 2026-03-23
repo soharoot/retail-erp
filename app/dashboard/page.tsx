@@ -117,7 +117,7 @@ export default function DashboardPage() {
       title: t("dashboard.totalRevenue"),
       value: formatCurrency(totalRevenue),
       icon: DollarSign,
-      color: "text-indigo-600 bg-indigo-50",
+      color: "text-[#00483c] bg-[#e6f0ed]",
       sub: `${completedSales.length} ventes complétées`,
       trend: "up",
     },
@@ -210,7 +210,7 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-2">
               <div className="flex items-center gap-4 mb-3 text-xs">
-                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-indigo-500" /> Revenus</span>
+                <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-[#00483c]" /> Revenus</span>
                 <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 rounded-sm bg-orange-400" /> Dépenses</span>
               </div>
               {chartData.map((d) => (
@@ -219,7 +219,7 @@ export default function DashboardPage() {
                   <div className="flex-1 space-y-1">
                     <div className="flex items-center gap-1">
                       <div
-                        className="h-3 rounded-sm bg-indigo-500 min-w-[2px] transition-all"
+                        className="h-3 rounded-sm bg-[#00483c] min-w-[2px] transition-all"
                         style={{ width: `${(d.revenue / maxChartVal) * 100}%` }}
                       />
                       <span className="text-gray-600">{formatCurrency(d.revenue)}</span>
@@ -243,7 +243,7 @@ export default function DashboardPage() {
           <h2 className="text-sm font-semibold text-gray-900 mb-4">{t("dashboard.quickActions")}</h2>
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: t("dashboard.newSale"), href: "/sales", icon: ShoppingCart, color: "bg-indigo-50 text-indigo-600 hover:bg-indigo-100" },
+              { label: t("dashboard.newSale"), href: "/sales", icon: ShoppingCart, color: "bg-[#e6f0ed] text-[#00483c] hover:bg-[#cce0db]" },
               { label: t("dashboard.newPurchase"), href: "/purchases", icon: ClipboardList, color: "bg-blue-50 text-blue-600 hover:bg-blue-100" },
               { label: t("dashboard.addProduct"), href: "/products", icon: Package, color: "bg-green-50 text-green-600 hover:bg-green-100" },
               { label: t("dashboard.viewReports"), href: "/reports", icon: BarChart3, color: "bg-purple-50 text-purple-600 hover:bg-purple-100" },
@@ -266,7 +266,7 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-900">{t("dashboard.recentTransactions")}</h2>
-            <Link href="/sales" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Voir tout</Link>
+            <Link href="/sales" className="text-xs text-[#00483c] hover:text-[#003d33] font-medium">Voir tout</Link>
           </div>
           {salesLoading ? (
             <div className="py-12 text-center text-sm text-gray-400">{t("common.loading")}</div>
@@ -305,7 +305,7 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-900">{t("dashboard.lowStockAlerts")}</h2>
-            <Link href="/inventory" className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">Voir tout</Link>
+            <Link href="/inventory" className="text-xs text-[#00483c] hover:text-[#003d33] font-medium">Voir tout</Link>
           </div>
           {lowStockItems.length === 0 ? (
             <div className="py-12 text-center text-sm text-gray-400">

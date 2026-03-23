@@ -401,7 +401,7 @@ export default function PurchasesPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { title: t("purchases.totalOrders"), value: String(totalOrders), icon: ClipboardList, color: "text-indigo-600 bg-indigo-50" },
+          { title: t("purchases.totalOrders"), value: String(totalOrders), icon: ClipboardList, color: "text-[#00483c] bg-[#e6f0ed]" },
           { title: t("common.pending"), value: String(pendingCount), icon: Clock, color: "text-yellow-600 bg-yellow-50" },
           { title: t("purchases.totalValue"), value: formatCurrency(totalValue), icon: DollarSign, color: "text-blue-600 bg-blue-50" },
           { title: t("purchases.received"), value: String(receivedUnits), icon: PackageCheck, color: "text-green-600 bg-green-50" },
@@ -426,7 +426,7 @@ export default function PurchasesPage() {
             onClick={() => setActiveTab(tab.id)}
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.id
-                ? "border-indigo-600 text-indigo-600"
+                ? "border-[#00483c] text-[#00483c]"
                 : "border-transparent text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -444,7 +444,7 @@ export default function PurchasesPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("common.search")}
-          className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
         />
         <ClipboardList className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
       </div>
@@ -566,7 +566,7 @@ export default function PurchasesPage() {
                           <td className="py-2">
                             {item.productName}
                             {variation && (
-                              <span className="ml-1 text-xs text-indigo-600">({variation.variationType}: {variation.variationValue})</span>
+                              <span className="ml-1 text-xs text-[#00483c]">({variation.variationType}: {variation.variationValue})</span>
                             )}
                           </td>
                           <td className="text-right py-2">{item.quantity}</td>
@@ -579,7 +579,7 @@ export default function PurchasesPage() {
                   <tfoot>
                     <tr>
                       <td colSpan={3} className="pt-3 text-right font-semibold">{t("common.total")} :</td>
-                      <td className="pt-3 text-right font-bold text-indigo-600">{formatCurrency(selectedOrder.total)}</td>
+                      <td className="pt-3 text-right font-bold text-[#00483c]">{formatCurrency(selectedOrder.total)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -657,7 +657,7 @@ export default function PurchasesPage() {
                 <select
                   value={formSupplierId}
                   onChange={(e) => { setFormSupplierId(e.target.value); setFormErrors({}) }}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                 >
                   <option value="">{t("purchases.selectSupplier")}</option>
                   {activeSuppliers.map((s) => (
@@ -673,7 +673,7 @@ export default function PurchasesPage() {
                   <label className="text-sm font-medium text-gray-700">{t("purchases.orderItems")} *</label>
                   <button
                     onClick={addItem}
-                    className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                    className="flex items-center gap-1 text-xs font-medium text-[#00483c] hover:text-[#003d33]"
                   >
                     <Plus className="h-3.5 w-3.5" /> {t("purchases.addItem")}
                   </button>
@@ -688,7 +688,7 @@ export default function PurchasesPage() {
                             <select
                               value={item.productId}
                               onChange={(e) => updateItem(idx, "productId", e.target.value)}
-                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                             >
                               <option value="">{t("purchases.selectProduct")}</option>
                               {activeProducts.map((p) => (
@@ -701,7 +701,7 @@ export default function PurchasesPage() {
                             min="1"
                             value={item.quantity}
                             onChange={(e) => updateItem(idx, "quantity", e.target.value)}
-                            className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                             placeholder="Qté"
                           />
                           <input
@@ -709,7 +709,7 @@ export default function PurchasesPage() {
                             step="0.01"
                             value={item.unitCost}
                             onChange={(e) => updateItem(idx, "unitCost", e.target.value)}
-                            className="w-28 rounded-lg border border-gray-200 px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-28 rounded-lg border border-gray-200 px-2 py-2 text-sm text-right focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                             placeholder={t("purchases.unitCost")}
                           />
                           <span className="w-24 py-2 text-sm text-right font-medium text-gray-700">
@@ -731,7 +731,7 @@ export default function PurchasesPage() {
                             <select
                               value={item.variationId}
                               onChange={(e) => updateItem(idx, "variationId", e.target.value)}
-                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                             >
                               <option value="">{t("purchases.selectVariation")}</option>
                               {prodVariations.map((v) => (
@@ -766,7 +766,7 @@ export default function PurchasesPage() {
                     min="0"
                     value={formAmountPaid}
                     onChange={(e) => setFormAmountPaid(e.target.value)}
-                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                   />
                 </div>
                 <div>
@@ -792,7 +792,7 @@ export default function PurchasesPage() {
                   type="date"
                   value={formExpectedDate}
                   onChange={(e) => setFormExpectedDate(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                 />
               </div>
 
@@ -806,7 +806,7 @@ export default function PurchasesPage() {
                 <button
                   onClick={handleCreateOrder}
                   disabled={!formSupplierId || formSubtotal <= 0}
-                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#00483c] rounded-lg hover:bg-[#003d33] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {t("purchases.newPurchase")}
                 </button>
