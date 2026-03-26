@@ -21,6 +21,7 @@ import {
   Settings,
   Shield,
   Activity,
+  Monitor,
   X,
   ChevronLeft,
 } from "lucide-react"
@@ -42,6 +43,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
     { nameKey: "nav.products", href: "/products", icon: Package },
     { nameKey: "nav.inventory", href: "/inventory", icon: Warehouse },
     { nameKey: "nav.sales", href: "/sales", icon: ShoppingCart },
+    { nameKey: "nav.pos", href: "/pos", icon: Monitor },
     { nameKey: "nav.purchases", href: "/purchases", icon: ClipboardList },
     { nameKey: "nav.suppliers", href: "/suppliers", icon: Truck },
     { nameKey: "nav.supplierDebts", href: "/supplier-debts", icon: Landmark },

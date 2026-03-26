@@ -54,6 +54,7 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionCode> = {
   "/products": PERMISSIONS.PRODUCTS_VIEW,
   "/inventory": PERMISSIONS.INVENTORY_VIEW,
   "/sales": PERMISSIONS.SALES_VIEW,
+  "/pos": PERMISSIONS.SALES_MANAGE,
   "/purchases": PERMISSIONS.PURCHASES_VIEW,
   "/suppliers": PERMISSIONS.SUPPLIERS_VIEW,
   "/supplier-debts": PERMISSIONS.SUPPLIER_DEBTS_VIEW,

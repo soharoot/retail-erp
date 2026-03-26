@@ -102,6 +102,7 @@ export interface Sale {
   customerId?: string | null
   customerName: string
   subtotal: number
+  discount: number
   tax: number
   total: number
   paymentMethod: "cash" | "card" | "transfer" | "check"

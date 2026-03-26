@@ -212,10 +212,13 @@ export default function PurchasesPage() {
     const remaining = Math.max(0, subtotal - paid)
     const today = new Date().toISOString().split("T")[0]
 
-    // Generate PO number
+    // Generate PO number (extract max from existing to avoid duplicates)
     const poPrefix = settings.poPrefix || "PO"
-    const nextNum = orders.length + 1
-    const poNumber = `${poPrefix}-${String(nextNum).padStart(4, "0")}`
+    const maxNum = orders.reduce((max, o) => {
+      const match = (o.poNumber ?? "").match(/(\d+)$/)
+      return match ? Math.max(max, parseInt(match[1])) : max
+    }, 0)
+    const poNumber = `${poPrefix}-${String(maxNum + 1).padStart(4, "0")}`
 
     const newOrder = await insertOrder({
       poNumber,
@@ -251,31 +254,9 @@ export default function PurchasesPage() {
       return
     }
 
-    // Update stock: per-variation or per-inventory
+    // NOTE: Stock is NOT updated here — only when marked as "received"
+    // Auto-update product.cost with latest purchase cost
     for (const item of validItems) {
-      const qty = parseInt(item.quantity) || 0
-      if (item.variationId) {
-        // Update product_variations.stock
-        const variation = variations.find((v) => v.id === item.variationId)
-        if (variation) {
-          await updateVariation(variation.id, { stock: variation.stock + qty } as Partial<ProductVariation>)
-        }
-      } else {
-        // Update inventory.stock (existing behavior)
-        const existing = inventoryByProduct.get(item.productId)
-        if (existing) {
-          await updateInventory(existing.id, { stock: existing.stock + qty, lastUpdated: today } as Partial<InventoryItem>)
-        } else {
-          await insertInventory({
-            productId: item.productId,
-            stock: qty,
-            minStock: 10,
-            lastUpdated: today,
-          } as Partial<InventoryItem>)
-        }
-      }
-
-      // Auto-update product.cost with latest purchase cost
       const prod = products.find((p) => p.id === item.productId)
       if (prod) {
         const cost = parseFloat(item.unitCost) || 0
@@ -322,21 +303,21 @@ export default function PurchasesPage() {
     const items = order.items ?? []
     const today = new Date().toISOString().split("T")[0]
 
-    // Reverse stock changes
-    for (const item of items) {
-      if (item.variationId) {
-        // Reverse variation stock
-        const variation = variations.find((v) => v.id === item.variationId)
-        if (variation) {
-          const newStock = Math.max(0, variation.stock - (item.quantity ?? 0))
-          await updateVariation(variation.id, { stock: newStock } as Partial<ProductVariation>)
-        }
-      } else {
-        // Reverse inventory stock
-        const inv = inventoryByProduct.get(item.productId ?? "")
-        if (inv) {
-          const newStock = Math.max(0, inv.stock - (item.quantity ?? 0))
-          await updateInventory(inv.id, { stock: newStock, lastUpdated: today } as Partial<InventoryItem>)
+    // Only reverse stock if the order was already received (stock was incremented)
+    if (order.status === "received") {
+      for (const item of items) {
+        if (item.variationId) {
+          const variation = variations.find((v) => v.id === item.variationId)
+          if (variation) {
+            const newStock = Math.max(0, variation.stock - (item.quantity ?? 0))
+            await updateVariation(variation.id, { stock: newStock } as Partial<ProductVariation>)
+          }
+        } else {
+          const inv = inventoryByProduct.get(item.productId ?? "")
+          if (inv) {
+            const newStock = Math.max(0, inv.stock - (item.quantity ?? 0))
+            await updateInventory(inv.id, { stock: newStock, lastUpdated: today } as Partial<InventoryItem>)
+          }
         }
       }
     }
@@ -371,11 +352,37 @@ export default function PurchasesPage() {
     const today = new Date().toISOString().split("T")[0]
     await updateOrder(order.id, { status: "received", receivedDate: today } as Partial<PurchaseOrder>)
 
+    // Increment stock now that goods are physically received
+    const items = order.items ?? []
+    for (const item of items) {
+      const qty = item.quantity ?? 0
+      if (qty <= 0) continue
+
+      if (item.variationId) {
+        const variation = variations.find((v) => v.id === item.variationId)
+        if (variation) {
+          await updateVariation(variation.id, { stock: variation.stock + qty } as Partial<ProductVariation>)
+        }
+      } else {
+        const existing = inventoryByProduct.get(item.productId ?? "")
+        if (existing) {
+          await updateInventory(existing.id, { stock: existing.stock + qty, lastUpdated: today } as Partial<InventoryItem>)
+        } else if (item.productId) {
+          await insertInventory({
+            productId: item.productId,
+            stock: qty,
+            minStock: 10,
+            lastUpdated: today,
+          } as Partial<InventoryItem>)
+        }
+      }
+    }
+
     if (user?.id && orgId) {
       logAction({
         action: "purchase.received",
         module: "purchases",
-        description: `BC ${order.poNumber} marqué comme reçu`,
+        description: `BC ${order.poNumber} marqué comme reçu — stock mis à jour`,
         userId: user.id,
         orgId,
         userName: user.email ?? undefined,
@@ -384,6 +391,7 @@ export default function PurchasesPage() {
     }
 
     await refreshOrders()
+    await refreshVariations()
     setSelectedOrder(null)
   }
 

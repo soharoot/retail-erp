@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/supabase/auth-context"
 import { Loader2 } from "lucide-react"
 
 const AUTH_PAGES = ["/login", "/register"]
+const FULLSCREEN_PAGES = ["/pos"]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -17,6 +18,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   const isAuthPage = AUTH_PAGES.includes(pathname)
+  const isFullScreenPage = FULLSCREEN_PAGES.includes(pathname)
 
   // Show minimal loading screen while session is resolving (only for protected pages)
   if (loading && !isAuthPage) {
@@ -32,6 +34,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Auth pages and unauthenticated users see children without the shell
   if (!user || isAuthPage) {
+    return <>{children}</>
+  }
+
+  // Full-screen pages (POS) require auth but skip sidebar/header
+  if (isFullScreenPage) {
     return <>{children}</>
   }
 
