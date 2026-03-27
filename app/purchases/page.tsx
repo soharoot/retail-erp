@@ -599,6 +599,7 @@ export default function PurchasesPage() {
                   <button
                     onClick={() => handleMarkReceived(selectedOrder)}
                     className="flex-1 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+                    title="Le stock sera automatiquement augmenté"
                   >
                     {t("purchases.markReceived")}
                   </button>
@@ -750,6 +751,7 @@ export default function PurchasesPage() {
                             </select>
                           </div>
                         )}
+                        {item.productId && <span className="text-[10px] text-green-600">{"\u2191"} Stock augmentera à la réception</span>}
                       </div>
                     )
                   })}

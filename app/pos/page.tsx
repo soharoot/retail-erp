@@ -8,12 +8,12 @@ import { useRBAC } from "@/lib/rbac/rbac-context"
 import { logAction } from "@/lib/activity/log-action"
 import { useTableData, insertChildRows, deleteChildRows } from "@/hooks/use-table-data"
 import { useSettings } from "@/hooks/use-settings"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, formatStock } from "@/lib/utils"
 import type { Sale, SaleItem, Product, InventoryItem, Customer, ProductVariation } from "@/lib/types"
 import {
   ArrowLeft, Search, Plus, Minus, Trash2, Printer, X,
   ShoppingCart, CreditCard, Banknote, Clock, Eye, Check,
-  Package, AlertTriangle,
+  Package, AlertTriangle, Barcode, Pencil,
 } from "lucide-react"
 
 // ── Cart Item Type ──────────────────────────────────────────
@@ -24,7 +24,10 @@ interface CartItem {
   variationLabel: string | null
   quantity: number
   unitPrice: number
+  unitPriceOverride: number | null
   costAtSale: number
+  itemDiscount: number
+  unit: "piece" | "kg" | "metre"
   lineTotal: number
 }
 
@@ -80,7 +83,7 @@ export default function POSPage() {
   const [discountField, setDiscountField] = useState<"discount" | "total">("discount")
 
   // Modals
-  const [showConfirm, setShowConfirm] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showInvoice, setShowInvoice] = useState<Sale | null>(null)
   const [showRecentSales, setShowRecentSales] = useState(false)
   const [showVariationPicker, setShowVariationPicker] = useState<Product | null>(null)
@@ -89,11 +92,20 @@ export default function POSPage() {
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
+  // Barcode scan
+  const [barcodeInput, setBarcodeInput] = useState("")
+  const barcodeRef = useRef<HTMLInputElement>(null)
+
+  // Payment flow
+  const [amountPaid, setAmountPaid] = useState("")
+  const [editingPrice, setEditingPrice] = useState<number | null>(null)
+  const [editingPriceValue, setEditingPriceValue] = useState("")
+
   const searchRef = useRef<HTMLInputElement>(null)
 
-  // Auto-focus search on mount
+  // Auto-focus barcode input on mount
   useEffect(() => {
-    searchRef.current?.focus()
+    barcodeRef.current?.focus()
   }, [])
 
   // Clear success message after 3s
@@ -104,14 +116,41 @@ export default function POSPage() {
     }
   }, [successMsg])
 
+  // ── Barcode scan handler ──────────────────────────────────
+  const handleBarcodeScan = (code: string) => {
+    if (!code.trim()) return
+    // Search products by barcode
+    const matchedProduct = activeProducts.find((p) => p.barcode === code.trim())
+    if (matchedProduct) {
+      addToCart(matchedProduct)
+      setBarcodeInput("")
+      return
+    }
+    // Search variations by barcode
+    for (const product of activeProducts) {
+      const prodVars = variationsByProduct.get(product.id) ?? []
+      const matchedVar = prodVars.find((v) => v.barcode === code.trim())
+      if (matchedVar) {
+        addToCart(product, matchedVar)
+        setBarcodeInput("")
+        return
+      }
+    }
+    setError(`${t("pos.barcodeNotFound")}: "${code.trim()}"`)
+    setBarcodeInput("")
+  }
+
   // ── Product filtering ─────────────────────────────────────
   const filteredProducts = useMemo(() => {
     if (!searchQuery.trim()) return activeProducts
     const q = searchQuery.toLowerCase()
     return activeProducts.filter((p) =>
-      p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q)
+      p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q) || (p.barcode ?? "").toLowerCase().includes(q)
     )
   }, [activeProducts, searchQuery])
+
+  // ── Effective price helper ─────────────────────────────────
+  const getEffectivePrice = (item: CartItem) => item.unitPriceOverride ?? item.unitPrice
 
   // ── Cart calculations ─────────────────────────────────────
   const subtotal = cart.reduce((sum, item) => sum + item.lineTotal, 0)
@@ -160,10 +199,15 @@ export default function POSPage() {
       return
     }
 
+    const effectivePrice = variation?.price ?? product.price
+    const effectiveCost = variation?.cost ?? product.cost ?? 0
+
     if (existingIdx >= 0) {
       const updated = [...cart]
-      updated[existingIdx].quantity += 1
-      updated[existingIdx].lineTotal = updated[existingIdx].quantity * updated[existingIdx].unitPrice
+      const item = updated[existingIdx]
+      item.quantity += 1
+      const ep = item.unitPriceOverride ?? item.unitPrice
+      item.lineTotal = item.quantity * ep - item.itemDiscount
       setCart(updated)
     } else {
       setCart([...cart, {
@@ -172,22 +216,25 @@ export default function POSPage() {
         variationId,
         variationLabel,
         quantity: 1,
-        unitPrice: product.price,
-        costAtSale: product.cost ?? 0,
-        lineTotal: product.price,
+        unitPrice: effectivePrice,
+        unitPriceOverride: null,
+        costAtSale: effectiveCost,
+        itemDiscount: 0,
+        unit: product.unit ?? "piece",
+        lineTotal: effectivePrice,
       }])
     }
     setShowVariationPicker(null)
   }
 
-  const updateQuantity = (index: number, delta: number) => {
+  const updateQuantity = (index: number, newQtyOrDelta: number, absolute = false) => {
     const updated = [...cart]
-    const newQty = updated[index].quantity + delta
+    const newQty = absolute ? newQtyOrDelta : updated[index].quantity + newQtyOrDelta
     if (newQty <= 0) {
       updated.splice(index, 1)
     } else {
       // Stock check for increase
-      if (delta > 0) {
+      if (newQty > updated[index].quantity) {
         const item = updated[index]
         let available: number
         if (item.variationId) {
@@ -201,9 +248,30 @@ export default function POSPage() {
         }
       }
       updated[index].quantity = newQty
-      updated[index].lineTotal = newQty * updated[index].unitPrice
+      const ep = updated[index].unitPriceOverride ?? updated[index].unitPrice
+      updated[index].lineTotal = newQty * ep - updated[index].itemDiscount
     }
     setCart(updated)
+  }
+
+  const updateItemDiscount = (index: number, discount: number) => {
+    const updated = [...cart]
+    const item = updated[index]
+    item.itemDiscount = Math.max(0, discount)
+    const ep = item.unitPriceOverride ?? item.unitPrice
+    item.lineTotal = item.quantity * ep - item.itemDiscount
+    setCart(updated)
+  }
+
+  const applyPriceOverride = (index: number, price: number) => {
+    const updated = [...cart]
+    const item = updated[index]
+    item.unitPriceOverride = price > 0 ? price : null
+    const ep = item.unitPriceOverride ?? item.unitPrice
+    item.lineTotal = item.quantity * ep - item.itemDiscount
+    setCart(updated)
+    setEditingPrice(null)
+    setEditingPriceValue("")
   }
 
   const removeFromCart = (index: number) => {
@@ -321,7 +389,7 @@ export default function POSPage() {
         productName: item.productName,
         variationId: item.variationId,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        unitPrice: getEffectivePrice(item),
         costAtSale: item.costAtSale,
         lineTotal: item.lineTotal,
       })))
@@ -376,13 +444,13 @@ export default function POSPage() {
           productName: item.productName,
           variationId: item.variationId,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          unitPrice: getEffectivePrice(item),
           costAtSale: item.costAtSale,
           lineTotal: item.lineTotal,
         })) as SaleItem[],
       }
       setShowInvoice(completedSale)
-      setShowConfirm(false)
+      setShowPaymentModal(false)
 
       // Clear cart for next sale
       setCart([])
@@ -497,8 +565,20 @@ export default function POSPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* ── LEFT: Product Grid ────────────────────────────── */}
         <div className="w-[60%] flex flex-col border-r border-gray-200">
-          {/* Search */}
-          <div className="p-4 border-b border-gray-200 bg-white">
+          {/* Barcode scan + Search */}
+          <div className="p-4 border-b border-gray-200 bg-white space-y-2">
+            <div className="relative">
+              <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <input
+                ref={barcodeRef}
+                type="text"
+                placeholder={t("pos.scanBarcode")}
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleBarcodeScan(barcodeInput) }}
+                className="w-full pl-10 pr-4 py-3 bg-yellow-50 border border-yellow-300 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#00483c] focus:border-transparent"
+              />
+            </div>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
@@ -595,39 +675,90 @@ export default function POSPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {cart.map((item, idx) => (
-                  <div key={`${item.productId}-${item.variationId}`} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{item.productName}</p>
-                      {item.variationLabel && (
-                        <p className="text-xs text-gray-500">{item.variationLabel}</p>
-                      )}
-                      <p className="text-xs text-gray-400">{formatCurrency(item.unitPrice)} / unité</p>
+                {cart.map((item, idx) => {
+                  const ep = getEffectivePrice(item)
+                  const isDecimalUnit = item.unit === "kg" || item.unit === "metre"
+                  return (
+                    <div key={`${item.productId}-${item.variationId}`} className="p-3 bg-gray-50 rounded-lg space-y-1.5">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{item.productName}</p>
+                          {item.variationLabel && (
+                            <p className="text-xs text-gray-500">{item.variationLabel}</p>
+                          )}
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {editingPrice === idx ? (
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                autoFocus
+                                value={editingPriceValue}
+                                onChange={(e) => setEditingPriceValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") applyPriceOverride(idx, parseFloat(editingPriceValue) || 0)
+                                  if (e.key === "Escape") { setEditingPrice(null); setEditingPriceValue("") }
+                                }}
+                                onBlur={() => { setEditingPrice(null); setEditingPriceValue("") }}
+                                className="w-24 px-1.5 py-0.5 text-xs border border-blue-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                            ) : (
+                              <>
+                                <span className={`text-xs ${item.unitPriceOverride ? "text-blue-600 font-medium" : "text-gray-400"}`}>
+                                  {formatCurrency(ep)} / {item.unit === "kg" ? "kg" : item.unit === "metre" ? "m" : "unité"}
+                                </span>
+                                <button
+                                  onClick={() => { setEditingPrice(idx); setEditingPriceValue(String(ep)) }}
+                                  className="p-0.5 text-gray-300 hover:text-blue-500"
+                                  title={t("pos.overridePrice")}
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-orange-500">{t("pos.stockWillDecrease")}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {isDecimalUnit ? (
+                            <input
+                              type="number"
+                              min="0.01"
+                              step={item.unit === "kg" ? "0.1" : "0.01"}
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0
+                                if (val > 0) updateQuantity(idx, val, true)
+                              }}
+                              className="w-20 text-center text-sm font-bold border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-[#00483c]"
+                            />
+                          ) : (
+                            <>
+                              <button onClick={() => updateQuantity(idx, -1)} className="h-7 w-7 flex items-center justify-center rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700"><Minus className="h-3 w-3" /></button>
+                              <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
+                              <button onClick={() => updateQuantity(idx, 1)} className="h-7 w-7 flex items-center justify-center rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700"><Plus className="h-3 w-3" /></button>
+                            </>
+                          )}
+                        </div>
+                        <p className="text-sm font-bold text-gray-900 w-20 text-right">{formatCurrency(item.lineTotal)}</p>
+                        <button onClick={() => removeFromCart(idx)} className="p-1 text-red-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
+                      </div>
+                      {/* Per-item discount */}
+                      <div className="flex items-center gap-2 pl-1">
+                        <label className="text-[10px] text-gray-400">{t("pos.itemDiscount")}:</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={item.itemDiscount || ""}
+                          onChange={(e) => updateItemDiscount(idx, parseFloat(e.target.value) || 0)}
+                          className="w-20 px-1.5 py-0.5 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#00483c]"
+                          placeholder="0"
+                        />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => updateQuantity(idx, -1)}
-                        className="h-7 w-7 flex items-center justify-center rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
-                      <button
-                        onClick={() => updateQuantity(idx, 1)}
-                        className="h-7 w-7 flex items-center justify-center rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </div>
-                    <p className="text-sm font-bold text-gray-900 w-24 text-right">{formatCurrency(item.lineTotal)}</p>
-                    <button
-                      onClick={() => removeFromCart(idx)}
-                      className="p-1 text-red-400 hover:text-red-600"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -720,7 +851,7 @@ export default function POSPage() {
 
               {/* Complete sale button */}
               <button
-                onClick={() => setShowConfirm(true)}
+                onClick={() => { setShowPaymentModal(true); setAmountPaid(paymentMethod === "card" ? String(grandTotal) : "") }}
                 disabled={processing}
                 className="w-full py-4 bg-gradient-to-r from-[#00483c] to-[#1f6052] text-white text-base font-bold rounded-xl hover:from-[#003d33] hover:to-[#00483c] active:scale-[0.99] transition-all disabled:opacity-50"
               >
@@ -770,38 +901,92 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* ── Confirmation Modal ────────────────────────────── */}
-      {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">{t("pos.confirmSale")}</h3>
-            <p className="text-sm text-gray-600 mb-6">
-              {t("pos.confirmSaleMessage")} <span className="font-bold text-[#00483c]">{formatCurrency(grandTotal)}</span> ?
-            </p>
-            <div className="text-sm text-gray-500 space-y-1 mb-6">
-              <p>{cart.length} {t("pos.items")} — {t("pos.subtotal")}: {formatCurrency(subtotal)}</p>
-              {clampedDiscount > 0 && <p>{t("pos.discount")}: -{formatCurrency(clampedDiscount)}</p>}
-              {taxRate > 0 && <p>{t("pos.tax")}: {formatCurrency(tax)}</p>}
-              <p>{t("pos.paymentMethod")}: {paymentMethod === "cash" ? t("pos.cash") : t("pos.card")}</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowConfirm(false)}
-                className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                {t("common.cancel")}
-              </button>
-              <button
-                onClick={handleCompleteSale}
-                disabled={processing}
-                className="flex-1 py-3 bg-gradient-to-r from-[#00483c] to-[#1f6052] text-white rounded-xl text-sm font-bold hover:from-[#003d33] hover:to-[#00483c] disabled:opacity-50"
-              >
-                {processing ? "..." : t("common.confirm")}
-              </button>
+      {/* ── Payment Modal ────────────────────────────────── */}
+      {showPaymentModal && (() => {
+        const paid = parseFloat(amountPaid) || 0
+        const changeToReturn = paid - grandTotal
+        const canConfirmCash = paymentMethod === "cash" ? paid >= grandTotal : true
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">{t("pos.finalizePayment")}</h3>
+
+              {/* Total */}
+              <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg mb-4">
+                <span className="text-sm font-medium text-gray-600">{t("pos.grandTotal")}</span>
+                <span className="text-2xl font-bold text-[#00483c]">{formatCurrency(grandTotal)}</span>
+              </div>
+
+              {/* Summary */}
+              <div className="text-sm text-gray-500 space-y-1 mb-4">
+                <p>{cart.length} {t("pos.items")} — {t("pos.subtotal")}: {formatCurrency(subtotal)}</p>
+                {clampedDiscount > 0 && <p>{t("pos.discount")}: -{formatCurrency(clampedDiscount)}</p>}
+                {taxRate > 0 && <p>{t("pos.tax")}: {formatCurrency(tax)}</p>}
+              </div>
+
+              {/* Payment method */}
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => { setPaymentMethod("cash"); setAmountPaid("") }}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${paymentMethod === "cash" ? "bg-[#00483c] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                >
+                  <Banknote className="h-4 w-4" />{t("pos.cash")}
+                </button>
+                <button
+                  onClick={() => { setPaymentMethod("card"); setAmountPaid(String(grandTotal)) }}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-colors ${paymentMethod === "card" ? "bg-[#00483c] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+                >
+                  <CreditCard className="h-4 w-4" />{t("pos.card")}
+                </button>
+              </div>
+
+              {/* Amount paid (cash only) */}
+              {paymentMethod === "cash" && (
+                <div className="space-y-3 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t("pos.amountPaid")}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={amountPaid}
+                      onChange={(e) => setAmountPaid(e.target.value)}
+                      autoFocus
+                      className="w-full px-3 py-3 text-lg font-bold text-center border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00483c]"
+                      placeholder={formatCurrency(grandTotal)}
+                    />
+                  </div>
+                  {paid > 0 && changeToReturn >= 0 && (
+                    <div className="flex justify-between items-center p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <span className="text-sm font-medium text-green-700">{t("pos.changeToReturn")}</span>
+                      <span className="text-xl font-bold text-green-700">{formatCurrency(changeToReturn)}</span>
+                    </div>
+                  )}
+                  {paid > 0 && changeToReturn < 0 && (
+                    <p className="text-sm text-red-500 text-center">{t("pos.insufficientAmount")}</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  {t("common.cancel")}
+                </button>
+                <button
+                  onClick={handleCompleteSale}
+                  disabled={processing || !canConfirmCash}
+                  className="flex-1 py-3 bg-gradient-to-r from-[#00483c] to-[#1f6052] text-white rounded-xl text-sm font-bold hover:from-[#003d33] hover:to-[#00483c] disabled:opacity-50"
+                >
+                  {processing ? "..." : t("common.confirm")}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ── Invoice Modal ─────────────────────────────────── */}
       {showInvoice && (

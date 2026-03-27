@@ -12,7 +12,7 @@ import { useTableData } from "@/hooks/use-table-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { FormError } from "@/components/shared/form-error"
 import { validateStockAdjustment } from "@/lib/validation"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatStock } from "@/lib/utils"
 import type { InventoryItem, Product, Category, SubCategory, ProductVariation } from "@/lib/types"
 import { Warehouse, AlertTriangle, X, TrendingUp, TrendingDown } from "lucide-react"
 
@@ -28,6 +28,8 @@ interface InventoryRow {
   minStock: number
   sellingPrice: number
   isVariation: boolean         // true = product_variations row, false = inventory row
+  unit: "piece" | "kg" | "metre"
+  barcode: string
 }
 
 function stockStatus(stock: number, minStock: number) {
@@ -99,9 +101,11 @@ export default function InventoryPage() {
             variationLabel: `${v.variationType}: ${v.variationValue}`,
             variationId: v.id,
             stock: v.stock,
-            minStock: 5, // default min for variations
-            sellingPrice: product.price,
+            minStock: 5,
+            sellingPrice: v.price ?? product.price,
             isVariation: true,
+            unit: product.unit ?? "piece",
+            barcode: v.barcode ?? product.barcode ?? "",
           })
         }
       } else {
@@ -119,6 +123,8 @@ export default function InventoryPage() {
           minStock: inv?.minStock ?? 10,
           sellingPrice: product.price,
           isVariation: false,
+          unit: product.unit ?? "piece",
+          barcode: product.barcode ?? "",
         })
       }
     }
@@ -151,7 +157,7 @@ export default function InventoryPage() {
   // ── adjust stock ────────────────────────────────────────────
   const handleAdjust = async () => {
     if (!adjustItem) return
-    const delta = parseInt(adjustAmount) || 0
+    const delta = parseFloat(adjustAmount) || 0
 
     const validation = validateStockAdjustment(delta, adjustItem.stock)
     if (!validation.valid) {
@@ -270,6 +276,8 @@ export default function InventoryPage() {
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.category")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.subCategory")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.variation")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("inventory.barcode")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("inventory.unit")}</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("inventory.stock")}</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("inventory.sellingPrice")}</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.status")}</th>
@@ -313,9 +321,17 @@ export default function InventoryPage() {
                           <span className="text-xs text-gray-400">—</span>
                         )}
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        {item.barcode ? <span className="font-mono text-xs text-gray-500" title={item.barcode}>{item.barcode.slice(0, 10)}</span> : <span className="text-xs text-gray-400">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                          {item.unit === "kg" ? "kg" : item.unit === "metre" ? "m" : "pc"}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex flex-col items-end gap-1">
-                          <span className="font-semibold text-gray-900">{item.stock}</span>
+                          <span className="font-semibold text-gray-900">{formatStock(item.stock, item.unit)}</span>
                           <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div className={`h-full ${barColor} rounded-full`} style={{ width: `${pct}%` }} />
                           </div>
@@ -363,7 +379,7 @@ export default function InventoryPage() {
                 {adjustItem.variationLabel && (
                   <p className="text-sm text-[#00483c] mt-0.5">{adjustItem.variationLabel}</p>
                 )}
-                <p className="text-sm text-gray-500 mt-0.5">{t("inventory.currentStock")} : <strong>{adjustItem.stock}</strong></p>
+                <p className="text-sm text-gray-500 mt-0.5">{t("inventory.currentStock")} : <strong>{formatStock(adjustItem.stock, adjustItem.unit)}</strong></p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -372,20 +388,21 @@ export default function InventoryPage() {
                 <p className="text-xs text-gray-400 mb-2">{t("inventory.adjustHint")}</p>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setAdjustAmount(String((parseInt(adjustAmount) || 0) - 1))}
+                    onClick={() => { const step = adjustItem.unit !== "piece" ? 0.5 : 1; setAdjustAmount(String((parseFloat(adjustAmount) || 0) - step)) }}
                     className="rounded-lg border border-gray-200 px-3 py-2 text-gray-600 hover:bg-gray-50"
                   >
                     <TrendingDown className="h-4 w-4" />
                   </button>
                   <input
                     type="number"
+                    step={adjustItem.unit !== "piece" ? "0.001" : "1"}
                     value={adjustAmount}
                     onChange={(e) => { setAdjustAmount(e.target.value); setAdjustError("") }}
                     className="flex-1 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-center font-medium focus:outline-none focus:ring-2 focus:ring-[#00483c]"
                     placeholder="0"
                   />
                   <button
-                    onClick={() => setAdjustAmount(String((parseInt(adjustAmount) || 0) + 1))}
+                    onClick={() => { const step = adjustItem.unit !== "piece" ? 0.5 : 1; setAdjustAmount(String((parseFloat(adjustAmount) || 0) + step)) }}
                     className="rounded-lg border border-gray-200 px-3 py-2 text-gray-600 hover:bg-gray-50"
                   >
                     <TrendingUp className="h-4 w-4" />
@@ -393,7 +410,7 @@ export default function InventoryPage() {
                 </div>
                 {adjustAmount && !adjustError && (
                   <p className="text-xs text-[#00483c] mt-1.5">
-                    {t("inventory.newStock")} : {Math.max(0, adjustItem.stock + (parseInt(adjustAmount) || 0))}
+                    {t("inventory.newStock")} : {formatStock(Math.max(0, adjustItem.stock + (parseFloat(adjustAmount) || 0)), adjustItem.unit)}
                   </p>
                 )}
                 <FormError error={adjustError} />

@@ -38,23 +38,30 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
   const { t } = useI18n()
   const { hasPermission, loading: rbacLoading } = useRBAC()
 
-  const navigation = [
+  // Core navigation (primary modules)
+  const coreNav = [
     { nameKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { nameKey: "nav.pos", href: "/pos", icon: Monitor },
     { nameKey: "nav.products", href: "/products", icon: Package },
     { nameKey: "nav.inventory", href: "/inventory", icon: Warehouse },
     { nameKey: "nav.sales", href: "/sales", icon: ShoppingCart },
-    { nameKey: "nav.pos", href: "/pos", icon: Monitor },
     { nameKey: "nav.purchases", href: "/purchases", icon: ClipboardList },
-    { nameKey: "nav.suppliers", href: "/suppliers", icon: Truck },
-    { nameKey: "nav.supplierDebts", href: "/supplier-debts", icon: Landmark },
     { nameKey: "nav.customers", href: "/customers", icon: Users },
-    { nameKey: "nav.invoicing", href: "/invoicing", icon: FileText },
-    { nameKey: "nav.financial", href: "/financial", icon: DollarSign },
+    { nameKey: "nav.suppliers", href: "/suppliers", icon: Truck },
     { nameKey: "nav.reports", href: "/reports", icon: BarChart3 },
     { nameKey: "nav.settings", href: "/settings", icon: Settings },
+  ]
+
+  // Secondary navigation
+  const secondaryNav = [
+    { nameKey: "nav.supplierDebts", href: "/supplier-debts", icon: Landmark },
+    { nameKey: "nav.invoicing", href: "/invoicing", icon: FileText },
+    { nameKey: "nav.financial", href: "/financial", icon: DollarSign },
     { nameKey: "nav.userManagement", href: "/users", icon: Shield },
     { nameKey: "nav.activityLog", href: "/activity", icon: Activity },
   ]
+
+  const navigation = [...coreNav, ...secondaryNav]
 
   return (
     <>
@@ -106,31 +113,41 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 px-3">
           <ul className="space-y-1">
-            {navigation.filter((item) => {
-              // While RBAC is loading, show all items to avoid flicker
-              if (rbacLoading) return true
-              const perm = NAV_PERMISSIONS[item.href]
-              return !perm || hasPermission(perm)
-            }).map((item) => {
-              const label = t(item.nameKey)
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+            {[coreNav, secondaryNav].map((group, groupIdx) => {
+              const filteredGroup = group.filter((item) => {
+                if (rbacLoading) return true
+                const perm = NAV_PERMISSIONS[item.href]
+                return !perm || hasPermission(perm)
+              })
+              if (filteredGroup.length === 0) return null
               return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    onClick={onClose}
-                    title={collapsed ? label : undefined}
-                    className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                      isActive
-                        ? "bg-white/15 text-white"
-                        : "text-white/70 hover:bg-white/10 hover:text-white",
-                      collapsed && "justify-center px-2"
-                    )}
-                  >
-                    <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive ? "text-white" : "text-white/50")} />
-                    {!collapsed && <span>{label}</span>}
-                  </Link>
+                <li key={groupIdx}>
+                  {groupIdx > 0 && <div className="border-t border-white/10 my-2" />}
+                  <ul className="space-y-1">
+                    {filteredGroup.map((item) => {
+                      const label = t(item.nameKey)
+                      const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            onClick={onClose}
+                            title={collapsed ? label : undefined}
+                            className={cn(
+                              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                              isActive
+                                ? "bg-white/15 text-white"
+                                : "text-white/70 hover:bg-white/10 hover:text-white",
+                              collapsed && "justify-center px-2"
+                            )}
+                          >
+                            <item.icon className={cn("h-5 w-5 flex-shrink-0", isActive ? "text-white" : "text-white/50")} />
+                            {!collapsed && <span>{label}</span>}
+                          </Link>
+                        </li>
+                      )
+                    })}
+                  </ul>
                 </li>
               )
             })}

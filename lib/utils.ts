@@ -54,6 +54,23 @@ export function formatDateShort(date: string | Date): string {
   }).format(new Date(date))
 }
 
+export function formatStock(stock: number, unit: string): string {
+  if (unit === "kg") return `${stock.toFixed(3)} kg`
+  if (unit === "metre") return `${stock.toFixed(2)} m`
+  return `${Math.round(stock)} pc`
+}
+
+export function generateBarcode(): string {
+  const base = Date.now().toString().slice(-12)
+  // Simple check digit (mod 10)
+  let sum = 0
+  for (let i = 0; i < 12; i++) {
+    sum += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3)
+  }
+  const check = (10 - (sum % 10)) % 10
+  return base + check
+}
+
 export function generateId(prefix: string = "ID"): string {
   const num = Math.floor(Math.random() * 9000) + 1000
   return `${prefix}-${num}`

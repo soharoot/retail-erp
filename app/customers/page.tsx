@@ -3,7 +3,7 @@
 import { PageGuard } from "@/components/shared/permission-guard"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
 import { useAuth } from "@/lib/supabase/auth-context"
 import { useRBAC } from "@/lib/rbac/rbac-context"
@@ -15,9 +15,9 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { SearchInput } from "@/components/shared/search-input"
 import { FormError } from "@/components/shared/form-error"
 import { validateCustomer } from "@/lib/validation"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Customer, Sale } from "@/lib/types"
-import { Users, UserCheck, DollarSign, Crown, Pencil, Trash2, X, Archive, RotateCcw } from "lucide-react"
+import { Users, UserCheck, DollarSign, Crown, Pencil, Trash2, X, Archive, RotateCcw, ChevronDown } from "lucide-react"
 
 const segmentColors: Record<string, string> = {
   VIP: "bg-purple-100 text-purple-700",
@@ -61,6 +61,7 @@ export default function CustomersPage() {
   const [form, setForm] = useState(emptyForm)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
+  const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null)
 
   // ── Derived data ──────────────────────────────────────────
   const activeCustomers = customers.filter((c) => !c.deletedAt)
@@ -263,18 +264,25 @@ export default function CustomersPage() {
               <tbody className="divide-y divide-gray-100">
                 {filtered.map((c) => {
                   const isArchived = !!c.deletedAt
+                  const isExpanded = expandedCustomerId === c.id
+                  const customerSales = sales.filter((s) => s.customerId === c.id).slice(0, 10)
+                  const pendingAmount = sales.filter((s) => s.customerId === c.id && s.status === "pending").reduce((sum, s) => sum + (s.total ?? 0), 0)
                   return (
-                    <tr key={c.id} className={`hover:bg-gray-50 ${isArchived ? "opacity-60" : ""}`}>
+                    <React.Fragment key={c.id}>
+                    <tr
+                      className={`hover:bg-gray-50 cursor-pointer ${isArchived ? "opacity-60" : ""}`}
+                      onClick={() => setExpandedCustomerId(isExpanded ? null : c.id)}
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
+                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? "rotate-0" : "-rotate-90"}`} />
                           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#cce0db] text-[#00483c] text-xs font-bold">
                             {c.name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                           </div>
                           <div>
                             <span className="text-sm font-medium text-gray-900">{c.name}</span>
-                            {isArchived && (
-                              <span className="ml-2 text-xs text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">Archived</span>
-                            )}
+                            {isArchived && <span className="ml-2 text-xs text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">Archivé</span>}
+                            {pendingAmount > 0 && <span className="ml-2 text-xs text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium">Dette: {formatCurrency(pendingAmount)}</span>}
                           </div>
                         </div>
                       </td>
@@ -289,16 +297,10 @@ export default function CustomersPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3"><StatusBadge status={c.status} /></td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           {isArchived ? (
-                            <button
-                              onClick={() => handleRestore(c.id)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors"
-                              title="Restore customer"
-                            >
-                              <RotateCcw className="h-4 w-4" />
-                            </button>
+                            <button onClick={() => handleRestore(c.id)} className="p-1.5 rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors" title="Restaurer"><RotateCcw className="h-4 w-4" /></button>
                           ) : (
                             <>
                               <button onClick={() => openEdit(c)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Pencil className="h-4 w-4" /></button>
@@ -308,6 +310,32 @@ export default function CustomersPage() {
                         </div>
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-3 bg-gray-50">
+                          <p className="text-xs font-semibold text-gray-600 mb-2">Historique des achats (10 derniers)</p>
+                          {customerSales.length === 0 ? (
+                            <p className="text-xs text-gray-400">Aucune vente pour ce client</p>
+                          ) : (
+                            <table className="w-full text-xs">
+                              <thead><tr className="border-b border-gray-200"><th className="text-left py-1 text-gray-500">N°</th><th className="text-left py-1 text-gray-500">Date</th><th className="text-right py-1 text-gray-500">Total</th><th className="text-center py-1 text-gray-500">Paiement</th><th className="text-center py-1 text-gray-500">Statut</th></tr></thead>
+                              <tbody>
+                                {customerSales.map((s) => (
+                                  <tr key={s.id} className="border-b border-gray-100">
+                                    <td className="py-1 font-medium text-gray-700">{s.saleNumber}</td>
+                                    <td className="py-1 text-gray-500">{formatDate(s.date)}</td>
+                                    <td className="py-1 text-right font-medium text-gray-900">{formatCurrency(s.total)}</td>
+                                    <td className="py-1 text-center text-gray-500">{s.paymentMethod}</td>
+                                    <td className="py-1 text-center"><StatusBadge status={s.status} /></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>

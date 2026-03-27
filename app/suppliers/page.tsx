@@ -3,7 +3,7 @@
 import { PageGuard } from "@/components/shared/permission-guard"
 import { PERMISSIONS } from "@/lib/rbac/permissions"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { useI18n } from "@/lib/i18n/context"
 import { useAuth } from "@/lib/supabase/auth-context"
 import { useRBAC } from "@/lib/rbac/rbac-context"
@@ -15,9 +15,9 @@ import { StatusBadge } from "@/components/shared/status-badge"
 import { SearchInput } from "@/components/shared/search-input"
 import { FormError } from "@/components/shared/form-error"
 import { validateSupplier } from "@/lib/validation"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Supplier, PurchaseOrder, SupplierDebt } from "@/lib/types"
-import { Truck, ShoppingBag, DollarSign, Landmark, Pencil, Trash2, X, Mail, Phone, Archive, RotateCcw } from "lucide-react"
+import { Truck, ShoppingBag, DollarSign, Landmark, Pencil, Trash2, X, Mail, Phone, Archive, RotateCcw, ChevronDown } from "lucide-react"
 
 const emptyForm = {
   name: "",
@@ -58,6 +58,7 @@ export default function SuppliersPage() {
   const [form, setForm] = useState(emptyForm)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null)
+  const [expandedSupplierId, setExpandedSupplierId] = useState<string | null>(null)
 
   // ── Derived data ──────────────────────────────────────────
   const activeSuppliers = suppliers.filter((s) => !s.deletedAt)
@@ -278,13 +279,21 @@ export default function SuppliersPage() {
                 {filtered.map((s) => {
                   const debt = getSupplierDebt(s.id)
                   const isArchived = !!s.deletedAt
+                  const isExpanded = expandedSupplierId === s.id
+                  const supplierPOs = purchases.filter((p) => p.supplierId === s.id).slice(0, 10)
                   return (
-                    <tr key={s.id} className={`hover:bg-gray-50 ${isArchived ? "opacity-60" : ""}`}>
+                    <React.Fragment key={s.id}>
+                    <tr
+                      className={`hover:bg-gray-50 cursor-pointer ${isArchived ? "opacity-60" : ""}`}
+                      onClick={() => setExpandedSupplierId(isExpanded ? null : s.id)}
+                    >
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {s.name}
-                        {isArchived && (
-                          <span className="ml-2 text-xs text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">Archived</span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${isExpanded ? "rotate-0" : "-rotate-90"}`} />
+                          <span>{s.name}</span>
+                          {isArchived && <span className="text-xs text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">Archivé</span>}
+                          {debt > 0 && <span className="text-xs text-red-600 bg-red-50 rounded px-1.5 py-0.5 font-medium">Dû: {formatCurrency(debt)}</span>}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-600">{s.contactPerson}</td>
                       <td className="px-4 py-3">
@@ -296,23 +305,13 @@ export default function SuppliersPage() {
                       <td className="px-4 py-3 text-sm text-gray-600">{getSupplierPurchaseCount(s.id)}</td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatCurrency(getSupplierTotalSpent(s.id))}</td>
                       <td className="px-4 py-3 text-sm font-medium">
-                        {debt > 0 ? (
-                          <span className="text-red-600">{formatCurrency(debt)}</span>
-                        ) : (
-                          <span className="text-green-600">No debt</span>
-                        )}
+                        {debt > 0 ? <span className="text-red-600">{formatCurrency(debt)}</span> : <span className="text-green-600">Aucune dette</span>}
                       </td>
                       <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
                           {isArchived ? (
-                            <button
-                              onClick={() => handleRestore(s.id)}
-                              className="p-1.5 rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors"
-                              title="Restore supplier"
-                            >
-                              <RotateCcw className="h-4 w-4" />
-                            </button>
+                            <button onClick={() => handleRestore(s.id)} className="p-1.5 rounded-lg text-gray-400 hover:bg-green-50 hover:text-green-600 transition-colors" title="Restaurer"><RotateCcw className="h-4 w-4" /></button>
                           ) : (
                             <>
                               <button onClick={() => openEdit(s)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600"><Pencil className="h-4 w-4" /></button>
@@ -322,6 +321,32 @@ export default function SuppliersPage() {
                         </div>
                       </td>
                     </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-3 bg-gray-50">
+                          <p className="text-xs font-semibold text-gray-600 mb-2">Historique des commandes (10 dernières)</p>
+                          {supplierPOs.length === 0 ? (
+                            <p className="text-xs text-gray-400">Aucune commande pour ce fournisseur</p>
+                          ) : (
+                            <table className="w-full text-xs">
+                              <thead><tr className="border-b border-gray-200"><th className="text-left py-1 text-gray-500">N°</th><th className="text-left py-1 text-gray-500">Date</th><th className="text-right py-1 text-gray-500">Total</th><th className="text-right py-1 text-gray-500">Payé</th><th className="text-center py-1 text-gray-500">Statut</th></tr></thead>
+                              <tbody>
+                                {supplierPOs.map((po) => (
+                                  <tr key={po.id} className="border-b border-gray-100">
+                                    <td className="py-1 font-medium text-gray-700">{po.poNumber}</td>
+                                    <td className="py-1 text-gray-500">{formatDate(po.date)}</td>
+                                    <td className="py-1 text-right font-medium text-gray-900">{formatCurrency(po.total)}</td>
+                                    <td className="py-1 text-right text-gray-600">{formatCurrency(po.amountPaid)}</td>
+                                    <td className="py-1 text-center"><StatusBadge status={po.status} /></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>

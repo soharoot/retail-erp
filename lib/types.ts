@@ -35,6 +35,8 @@ export interface Product {
   description: string
   price: number             // selling price
   cost: number              // last purchase cost (auto-updated, not user-editable)
+  unit: "piece" | "kg" | "metre"
+  barcode?: string
   status: "active" | "inactive"
   deletedAt?: string | null
   createdAt: string
@@ -48,6 +50,9 @@ export interface ProductVariation {
   variationType: string     // e.g. "Taille", "Couleur", "Stockage"
   variationValue: string    // e.g. "S", "Noir", "128Go"
   stock: number
+  price?: number
+  cost?: number
+  barcode?: string
   sku?: string
   createdAt: string
 }

@@ -11,10 +11,13 @@ import { logAction } from "@/lib/activity/log-action"
 import { useTableData } from "@/hooks/use-table-data"
 import { PageHeader } from "@/components/layout/page-header"
 import { FormError, FormWarning } from "@/components/shared/form-error"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, generateBarcode } from "@/lib/utils"
 import { validateProduct } from "@/lib/validation"
 import type { Product, InventoryItem, Category, SubCategory, ProductVariation, VariationType, VariationValue } from "@/lib/types"
-import { Package, Tag, Edit2, Trash2, Plus, X, Archive, RotateCcw, FolderTree, Minus } from "lucide-react"
+import { Package, Tag, Edit2, Trash2, Plus, X, Archive, RotateCcw, FolderTree, Minus, Barcode, Zap } from "lucide-react"
+
+const UNIT_LABELS: Record<string, string> = { piece: "Pièce", kg: "Kilogramme (kg)", metre: "Mètre (m)" }
+const UNIT_SHORT: Record<string, string> = { piece: "pc", kg: "kg", metre: "m" }
 
 const emptyForm = {
   name: "",
@@ -22,6 +25,9 @@ const emptyForm = {
   subCategoryId: "",
   description: "",
   price: "",
+  cost: "",
+  unit: "piece" as "piece" | "kg" | "metre",
+  barcode: "",
   status: "active" as "active" | "inactive",
 }
 
@@ -29,6 +35,9 @@ interface VariationForm {
   variationType: string
   variationValue: string
   stock: string
+  price: string
+  cost: string
+  barcode: string
 }
 
 export default function ProductsPage() {
@@ -183,6 +192,9 @@ export default function ProductsPage() {
       subCategoryId: p.subCategoryId ?? "",
       description: p.description,
       price: String(p.price),
+      cost: String(p.cost ?? ""),
+      unit: p.unit ?? "piece",
+      barcode: p.barcode ?? "",
       status: p.status,
     })
     setErrors({})
@@ -217,6 +229,9 @@ export default function ProductsPage() {
         category: catName,
         description: (form.description ?? "").trim(),
         price,
+        cost: parseFloat(form.cost) || 0,
+        unit: form.unit,
+        barcode: form.barcode.trim() || null,
         status: form.status,
       } as Partial<Product>)
 
@@ -239,7 +254,10 @@ export default function ProductsPage() {
             productId: editingProduct.id,
             variationType: v.variationType,
             variationValue: v.variationValue,
-            stock: parseInt(v.stock) || 0,
+            stock: parseFloat(v.stock) || 0,
+            price: v.price ? parseFloat(v.price) : null,
+            cost: v.cost ? parseFloat(v.cost) : null,
+            barcode: v.barcode.trim() || null,
           } as Partial<ProductVariation>)
         }
       }
@@ -251,7 +269,9 @@ export default function ProductsPage() {
         category: catName,
         description: (form.description ?? "").trim(),
         price,
-        cost: 0,
+        cost: parseFloat(form.cost) || 0,
+        unit: form.unit,
+        barcode: form.barcode.trim() || null,
         status: form.status,
       } as Partial<Product>)
 
@@ -440,7 +460,59 @@ export default function ProductsPage() {
   }
 
   // ── Variation helpers ─────────────────────────────────────
-  const addVariationRow = () => setProductVariations([...productVariations, { variationType: "", variationValue: "", stock: "0" }])
+  const addVariationRow = () => setProductVariations([...productVariations, { variationType: "", variationValue: "", stock: "0", price: "", cost: "", barcode: "" }])
+
+  // Generate combinations from selected types/values
+  const [showCombinationBuilder, setShowCombinationBuilder] = useState(false)
+  const [selectedTypesForCombo, setSelectedTypesForCombo] = useState<Record<string, string[]>>({})
+
+  const toggleComboType = (typeName: string) => {
+    setSelectedTypesForCombo((prev) => {
+      const copy = { ...prev }
+      if (copy[typeName]) delete copy[typeName]
+      else copy[typeName] = []
+      return copy
+    })
+  }
+
+  const toggleComboValue = (typeName: string, value: string) => {
+    setSelectedTypesForCombo((prev) => {
+      const copy = { ...prev }
+      const vals = copy[typeName] ?? []
+      copy[typeName] = vals.includes(value) ? vals.filter((v) => v !== value) : [...vals, value]
+      return copy
+    })
+  }
+
+  const generateCombinations = () => {
+    const entries = Object.entries(selectedTypesForCombo).filter(([, vals]) => vals.length > 0)
+    if (entries.length === 0) return
+
+    // Cartesian product
+    let combos: Array<Array<{ type: string; value: string }>> = [[]]
+    for (const [typeName, values] of entries) {
+      const next: typeof combos = []
+      for (const combo of combos) {
+        for (const val of values) {
+          next.push([...combo, { type: typeName, value: val }])
+        }
+      }
+      combos = next
+    }
+
+    const newRows: VariationForm[] = combos.map((combo) => ({
+      variationType: combo.map((c) => c.type).join(" / "),
+      variationValue: combo.map((c) => c.value).join(" / "),
+      stock: "0",
+      price: "",
+      cost: "",
+      barcode: "",
+    }))
+
+    setProductVariations((prev) => [...prev, ...newRows])
+    setShowCombinationBuilder(false)
+    setSelectedTypesForCombo({})
+  }
   const removeVariationRow = (idx: number) => setProductVariations(productVariations.filter((_, i) => i !== idx))
   const updateVariationRow = (idx: number, field: keyof VariationForm, value: string) =>
     setProductVariations(productVariations.map((v, i) => i === idx ? { ...v, [field]: value } : v))
@@ -524,7 +596,9 @@ export default function ProductsPage() {
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("products.productName")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.category")}</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">{t("common.subCategory")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("products.unit")}</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">{t("products.sellingPrice")}</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("products.barcode")}</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.variations")}</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.status")}</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">{t("common.actions")}</th>
@@ -549,7 +623,13 @@ export default function ProductsPage() {
                       </td>
                       <td className="px-4 py-3">{catName && <span className="rounded-full bg-[#e6f0ed] px-2.5 py-1 text-xs font-medium text-[#003d33]">{catName}</span>}</td>
                       <td className="px-4 py-3">{subCatName && <span className="rounded-full bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">{subCatName}</span>}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{UNIT_SHORT[product.unit ?? "piece"] ?? "pc"}</span>
+                      </td>
                       <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(product.price ?? 0)}</td>
+                      <td className="px-4 py-3 text-center">
+                        {product.barcode ? <span className="font-mono text-xs text-gray-500" title={product.barcode}>{product.barcode.slice(0, 8)}…</span> : <span className="text-xs text-gray-400">—</span>}
+                      </td>
                       <td className="px-4 py-3 text-center">
                         {prodVars.length > 0 ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{prodVars.length} var.</span> : <span className="text-xs text-gray-400">—</span>}
                       </td>
@@ -613,10 +693,32 @@ export default function ProductsPage() {
                   </select>
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.sellingPrice")} *</label>
-                <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => { setForm({ ...form, price: e.target.value }); setErrors((p) => ({ ...p, price: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] ${errors.price ? "border-red-300" : "border-gray-200"}`} placeholder="0.00" />
-                <FormError error={errors.price} />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.sellingPrice")} *</label>
+                  <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => { setForm({ ...form, price: e.target.value }); setErrors((p) => ({ ...p, price: "" })) }} className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] ${errors.price ? "border-red-300" : "border-gray-200"}`} placeholder="0.00" />
+                  <FormError error={errors.price} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.cost")}</label>
+                  <input type="number" min="0" step="0.01" value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]" placeholder="0.00" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.unit")}</label>
+                  <select value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value as "piece" | "kg" | "metre" })} className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
+                    {Object.entries(UNIT_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                  </select>
+                  {form.unit !== "piece" && <p className="text-xs text-blue-600 mt-1">Les quantités décimales seront autorisées pour ce produit</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("products.barcode")}</label>
+                  <div className="flex gap-2">
+                    <input value={form.barcode} onChange={(e) => setForm({ ...form, barcode: e.target.value })} className="flex-1 rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#00483c]" placeholder="Code-barres" />
+                    <button type="button" onClick={() => setForm({ ...form, barcode: generateBarcode() })} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50" title={t("products.generateBarcode")}><Barcode className="h-4 w-4" /></button>
+                  </div>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("common.description")}</label>
@@ -634,16 +736,65 @@ export default function ProductsPage() {
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <label className="text-sm font-medium text-gray-700">{t("products.variations")}</label>
-                  <button onClick={addVariationRow} className="flex items-center gap-1 text-xs font-medium text-[#00483c] hover:text-[#003d33]">
-                    <Plus className="h-3.5 w-3.5" /> {t("products.addVariation")}
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => setShowCombinationBuilder(!showCombinationBuilder)} className="flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700">
+                      <Zap className="h-3.5 w-3.5" /> {t("products.generateCombinations")}
+                    </button>
+                    <button onClick={addVariationRow} className="flex items-center gap-1 text-xs font-medium text-[#00483c] hover:text-[#003d33]">
+                      <Plus className="h-3.5 w-3.5" /> {t("products.addVariation")}
+                    </button>
+                  </div>
                 </div>
+
+                {/* Combination Builder */}
+                {showCombinationBuilder && (
+                  <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
+                    <p className="text-xs font-medium text-blue-700">{t("products.selectVariationTypes")}</p>
+                    {variationTypes.map((vt) => {
+                      const vals = variationValues.filter((vv) => vv.variationTypeId === vt.id)
+                      const isSelected = !!selectedTypesForCombo[vt.name]
+                      return (
+                        <div key={vt.id}>
+                          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                            <input type="checkbox" checked={isSelected} onChange={() => toggleComboType(vt.name)} className="rounded border-gray-300" />
+                            {vt.name}
+                          </label>
+                          {isSelected && (
+                            <div className="ml-6 mt-1 flex flex-wrap gap-1.5">
+                              {vals.map((val) => {
+                                const checked = (selectedTypesForCombo[vt.name] ?? []).includes(val.value)
+                                return (
+                                  <label key={val.id} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium cursor-pointer ${checked ? "bg-blue-600 text-white" : "bg-white text-gray-600 border border-gray-200"}`}>
+                                    <input type="checkbox" checked={checked} onChange={() => toggleComboValue(vt.name, val.value)} className="sr-only" />
+                                    {val.value}
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    <button onClick={generateCombinations} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+                      <Zap className="inline h-3 w-3 mr-1" />{t("products.generateCombinations")}
+                    </button>
+                  </div>
+                )}
+
                 {existingVariations.length > 0 && (
                   <div className="space-y-2 mb-3">
                     {existingVariations.map((v) => (
-                      <div key={v.id} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm">
-                        <span><span className="font-medium text-gray-700">{v.variationType}:</span> <span className="text-gray-900">{v.variationValue}</span> <span className="text-gray-500">(stock: {v.stock})</span></span>
-                        <button onClick={() => handleDeleteExistingVariation(v.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                      <div key={v.id} className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span><span className="font-medium text-gray-700">{v.variationType}:</span> <span className="text-gray-900">{v.variationValue}</span></span>
+                          <button onClick={() => handleDeleteExistingVariation(v.id)} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"><Trash2 className="h-3.5 w-3.5" /></button>
+                        </div>
+                        <div className="flex gap-3 mt-1 text-xs text-gray-500">
+                          <span>Stock: {v.stock}</span>
+                          {v.price != null && <span>Prix: {formatCurrency(v.price)}</span>}
+                          {v.cost != null && <span>Coût: {formatCurrency(v.cost)}</span>}
+                          {v.barcode && <span className="font-mono">CB: {v.barcode}</span>}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -652,17 +803,27 @@ export default function ProductsPage() {
                   const selectedType = variationTypes.find((vt) => vt.name === v.variationType)
                   const typeValues = selectedType ? (valuesByType.get(selectedType.id) ?? []) : []
                   return (
-                    <div key={idx} className="flex gap-2 items-start mb-2">
-                      <select value={v.variationType} onChange={(e) => { updateVariationRow(idx, "variationType", e.target.value); updateVariationRow(idx, "variationValue", "") }} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
-                        <option value="">{t("products.variationType")}</option>
-                        {variationTypes.map((vt) => <option key={vt.id} value={vt.name}>{vt.name}</option>)}
-                      </select>
-                      <select value={v.variationValue} onChange={(e) => updateVariationRow(idx, "variationValue", e.target.value)} disabled={!v.variationType} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] disabled:opacity-50">
-                        <option value="">{t("products.variationValue")}</option>
-                        {typeValues.map((tv) => <option key={tv.id} value={tv.value}>{tv.value}</option>)}
-                      </select>
-                      <input type="number" min="0" value={v.stock} onChange={(e) => updateVariationRow(idx, "stock", e.target.value)} placeholder="Stock" className="w-20 rounded-lg border border-gray-200 px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
-                      <button onClick={() => removeVariationRow(idx)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Minus className="h-4 w-4" /></button>
+                    <div key={idx} className="space-y-2 mb-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+                      <div className="flex gap-2 items-start">
+                        <select value={v.variationType} onChange={(e) => { updateVariationRow(idx, "variationType", e.target.value); updateVariationRow(idx, "variationValue", "") }} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c]">
+                          <option value="">{t("products.variationType")}</option>
+                          {variationTypes.map((vt) => <option key={vt.id} value={vt.name}>{vt.name}</option>)}
+                        </select>
+                        <select value={v.variationValue} onChange={(e) => updateVariationRow(idx, "variationValue", e.target.value)} disabled={!v.variationType} className="flex-1 rounded-lg border border-gray-200 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#00483c] disabled:opacity-50">
+                          <option value="">{t("products.variationValue")}</option>
+                          {typeValues.map((tv) => <option key={tv.id} value={tv.value}>{tv.value}</option>)}
+                        </select>
+                        <button onClick={() => removeVariationRow(idx)} className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500"><Minus className="h-4 w-4" /></button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        <input type="number" min="0" step="0.01" value={v.price} onChange={(e) => updateVariationRow(idx, "price", e.target.value)} placeholder={t("products.sellingPrice")} className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
+                        <input type="number" min="0" step="0.01" value={v.cost} onChange={(e) => updateVariationRow(idx, "cost", e.target.value)} placeholder={t("products.cost")} className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
+                        <div className="flex gap-1">
+                          <input value={v.barcode} onChange={(e) => updateVariationRow(idx, "barcode", e.target.value)} placeholder={t("products.barcode")} className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
+                          <button type="button" onClick={() => updateVariationRow(idx, "barcode", generateBarcode())} className="rounded border border-gray-200 px-1.5 text-gray-400 hover:text-gray-600"><Barcode className="h-3 w-3" /></button>
+                        </div>
+                        <input type="number" min="0" value={v.stock} onChange={(e) => updateVariationRow(idx, "stock", e.target.value)} placeholder="Stock" className="rounded-lg border border-gray-200 px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#00483c]" />
+                      </div>
                     </div>
                   )
                 })}
