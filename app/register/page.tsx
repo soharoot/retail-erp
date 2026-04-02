@@ -110,7 +110,7 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="text-center mb-8">
-          <Image src="/logo.svg" alt="Tijaro" width={56} height={56} className="rounded-xl mb-4 mx-auto" />
+          <Image src="/logo.svg" alt="Tijaro" width={96} height={96} className="rounded-2xl mb-4 mx-auto shadow-lg" />
           <h1 className="text-2xl font-bold text-gray-900">Créer un compte</h1>
           <p className="text-sm text-gray-500 mt-1">Commencez avec Tijaro</p>
         </div>

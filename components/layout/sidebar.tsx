@@ -84,20 +84,20 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
       >
         {/* Logo */}
         <div className={cn(
-          "flex items-center h-16 px-4 border-b border-white/10",
+          "flex items-center h-20 px-4 border-b border-white/10",
           collapsed ? "justify-center" : "justify-between"
         )}>
           {!collapsed && (
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <Image src="/logo.svg" alt="Tijaro" width={32} height={32} className="rounded-lg" />
+            <Link href="/dashboard" className="flex items-center gap-3">
+              <Image src="/logo.svg" alt="Tijaro" width={52} height={52} className="rounded-xl flex-shrink-0" />
               <div>
-                <h1 className="text-sm font-bold text-white">Tijaro</h1>
-                <p className="text-[10px] text-white/60">Gestion Commerciale</p>
+                <h1 className="text-base font-bold text-white">Tijaro</h1>
+                <p className="text-[11px] text-white/60">Gestion Commerciale</p>
               </div>
             </Link>
           )}
           {collapsed && (
-            <Image src="/logo.svg" alt="Tijaro" width={32} height={32} className="rounded-lg" />
+            <Image src="/logo.svg" alt="Tijaro" width={44} height={44} className="rounded-xl" />
           )}
           <button
             onClick={onClose}

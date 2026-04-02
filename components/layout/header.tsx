@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { Bell, Search, Menu, User, LogOut, Package } from "lucide-react"
 import { useAuth } from "@/lib/supabase/auth-context"
 import { useSettings } from "@/hooks/use-settings"
@@ -37,11 +38,9 @@ export function Header({ onMenuClick }: HeaderProps) {
         <Menu className="h-5 w-5 text-gray-500" />
       </button>
 
-      {/* Company name — shown on small screens where sidebar is hidden */}
+      {/* Logo — shown on small screens where sidebar is hidden */}
       <div className="lg:hidden flex-shrink-0">
-        <p className="text-sm font-bold text-gray-900 truncate max-w-[120px]">
-          {settings.companyName}
-        </p>
+        <Image src="/logo.svg" alt="Tijaro" width={36} height={36} className="rounded-lg" />
       </div>
 
       <div className="flex-1 max-w-md hidden sm:block">
