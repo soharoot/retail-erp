@@ -995,7 +995,7 @@ export default function POSPage() {
             <div id="pos-invoice" className="p-6">
               {/* Company header */}
               <div className="text-center mb-6 pb-4 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900">{settings?.companyName || "Ledger ERP"}</h2>
+                <h2 className="text-xl font-bold text-gray-900">{settings?.companyName || "Tijaro"}</h2>
                 {settings?.address && <p className="text-xs text-gray-500 mt-1">{settings.address}</p>}
                 <div className="flex items-center justify-center gap-4 mt-1 text-xs text-gray-500">
                   {settings?.phone && <span>{settings.phone}</span>}

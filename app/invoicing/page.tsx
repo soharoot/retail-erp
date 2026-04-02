@@ -42,7 +42,7 @@ export default function InvoicingPage() {
 
   const taxRate = (settings.taxRate ?? 0) / 100
   const taxRateLabel = `${settings.taxRate ?? 0}%`
-  const companyName = settings.companyName || "Enterprise Ledger Store"
+  const companyName = settings.companyName || "Tijaro"
 
   // Build sale invoices — exclude cancelled
   const saleInvoices: UnifiedInvoice[] = sales

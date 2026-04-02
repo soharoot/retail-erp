@@ -20,8 +20,8 @@ const publicSans = Public_Sans({
 })
 
 export const metadata: Metadata = {
-  title: "Enterprise Ledger - Retail & Wholesale ERP",
-  description: "SaaS ERP platform for Algerian retail, wholesale, and e-commerce businesses",
+  title: "Tijaro - ERP Retail & Wholesale",
+  description: "Tijaro — Plateforme ERP SaaS pour le commerce de détail, gros et e-commerce.",
 }
 
 export default function RootLayout({

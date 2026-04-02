@@ -293,7 +293,7 @@ export default function SettingsPage() {
                 <div className="border-t pt-4">
                   <h4 className="text-sm font-medium text-gray-900 mb-3">Informations système</h4>
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div><span className="text-gray-500">Version :</span><span className="ml-2 font-medium text-gray-900">v2.0.0</span></div>
+                    <div><span className="text-gray-500">Version :</span><span className="ml-2 font-medium text-gray-900">v3.0.0</span></div>
                     <div><span className="text-gray-500">Dernière sauvegarde :</span><span className="ml-2 font-medium text-gray-900">Non configuré</span></div>
                     <div><span className="text-gray-500">Base de données :</span><span className="ml-2 font-medium text-gray-900">Supabase PostgreSQL</span></div>
                     <div><span className="text-gray-500">Stockage :</span><span className="ml-2 font-medium text-gray-900">Tables normalisées avec RLS</span></div>

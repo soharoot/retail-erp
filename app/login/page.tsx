@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
+import Image from "next/image"
 import { LogIn, Mail, Lock, AlertCircle, Loader2 } from "lucide-react"
 
 export default function LoginPage() {
@@ -53,11 +54,9 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-[#00483c] text-white mb-4">
-            <LogIn className="h-7 w-7" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
-          <p className="text-sm text-gray-500 mt-1">Sign in to your Enterprise Ledger account</p>
+          <Image src="/logo.svg" alt="Tijaro" width={56} height={56} className="rounded-xl mb-4 mx-auto" />
+          <h1 className="text-2xl font-bold text-gray-900">Bienvenue</h1>
+          <p className="text-sm text-gray-500 mt-1">Connectez-vous à votre compte Tijaro</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
@@ -163,7 +162,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Enterprise Ledger v2.0 &mdash; Enterprise Resource Planning
+          Tijaro v3.0 &mdash; Gestion Commerciale
         </p>
       </div>
     </div>

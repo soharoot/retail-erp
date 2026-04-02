@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n/context"
 import { useRBAC } from "@/lib/rbac/rbac-context"
 import { NAV_PERMISSIONS } from "@/lib/rbac/permissions"
+import Image from "next/image"
 import {
-  LayoutDashboard,
   Package,
   Warehouse,
   ShoppingCart,
@@ -22,6 +22,7 @@ import {
   Shield,
   Activity,
   Monitor,
+  LayoutDashboard,
   X,
   ChevronLeft,
 } from "lucide-react"
@@ -88,19 +89,15 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         )}>
           {!collapsed && (
             <Link href="/dashboard" className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white">
-                <LayoutDashboard className="h-4 w-4" />
-              </div>
+              <Image src="/logo.svg" alt="Tijaro" width={32} height={32} className="rounded-lg" />
               <div>
-                <h1 className="text-sm font-bold text-white">Ledger ERP</h1>
-                <p className="text-[10px] text-white/60">Retail & Wholesale</p>
+                <h1 className="text-sm font-bold text-white">Tijaro</h1>
+                <p className="text-[10px] text-white/60">Gestion Commerciale</p>
               </div>
             </Link>
           )}
           {collapsed && (
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white">
-              <LayoutDashboard className="h-4 w-4" />
-            </div>
+            <Image src="/logo.svg" alt="Tijaro" width={32} height={32} className="rounded-lg" />
           )}
           <button
             onClick={onClose}
@@ -168,7 +165,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
         {!collapsed && (
           <div className="px-4 py-3 border-t border-white/10">
             <p className="text-xs text-white/40">Version du système</p>
-            <p className="text-xs font-medium text-white/70">v2.0.0</p>
+            <p className="text-xs font-medium text-white/70">v3.0.0</p>
           </div>
         )}
       </aside>

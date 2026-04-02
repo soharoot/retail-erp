@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
+import Image from "next/image"
 import { UserPlus, Mail, Lock, User, AlertCircle, Loader2, MailCheck } from "lucide-react"
 
 export default function RegisterPage() {
@@ -96,7 +97,7 @@ export default function RegisterPage() {
             </Link>
           </div>
           <p className="text-center text-xs text-gray-400 mt-6">
-            Enterprise Ledger v2.0 &mdash; Enterprise Resource Planning
+            Tijaro v3.0 &mdash; Gestion Commerciale
           </p>
         </div>
       </div>
@@ -109,11 +110,9 @@ export default function RegisterPage() {
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-[#00483c] text-white mb-4">
-            <UserPlus className="h-7 w-7" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900">Create Account</h1>
-          <p className="text-sm text-gray-500 mt-1">Get started with Enterprise Ledger</p>
+          <Image src="/logo.svg" alt="Tijaro" width={56} height={56} className="rounded-xl mb-4 mx-auto" />
+          <h1 className="text-2xl font-bold text-gray-900">Créer un compte</h1>
+          <p className="text-sm text-gray-500 mt-1">Commencez avec Tijaro</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
